@@ -8,7 +8,7 @@ A portrait, mobile-first falling-block MVP for Godot 4. The game uses original c
 2. Run the main scene (F6) or project (F5).
 3. Use arrows/A/D, Down/S, X/Up, Space, and P/Escape. Press R to retry and M to toggle music. Touch or click the controls drawn at the bottom; clicking the playfield rotates.
 
-Press Start on the title screen to open the room-background, touch-friendly starting-level grid. F1 reveals the temporary line-clear timing tuner while choosing a level.
+Press Start on the title screen to open the room-background, touch-friendly starting-level grid. Left/Right moves across levels, Up/Down moves between rows, and Enter/Space confirms. F1 reveals the temporary line-clear timing tuner while choosing a level.
 
 ## Version checkpoints
 

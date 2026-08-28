@@ -330,10 +330,10 @@ func _input(event: InputEvent) -> void:
 		if handle_menu_input(event):
 			get_viewport().set_input_as_handled()
 			return
-		if is_start_input(event):
+		if (state == State.LEVEL_SELECT and is_confirm_input(event)) or (state == State.GAME_OVER and is_start_input(event)):
 			start_game()
 			get_viewport().set_input_as_handled()
-		return
+			return
 	if state != State.PLAYING:
 		return
 	if event.is_action_pressed("move_left"):
@@ -360,6 +360,14 @@ func is_start_input(event: InputEvent) -> bool:
 	# selector can receive clicks and touches without starting the game first.
 	return false
 
+func is_confirm_input(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		return event.pressed and not event.echo and key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
+	if event is InputEventJoypadButton:
+		return event.pressed and event.button_index in [JOY_BUTTON_A, JOY_BUTTON_START]
+	return false
+
 func is_title_start_input(event: InputEvent) -> bool:
 	if is_start_input(event):
 		return true
@@ -377,6 +385,12 @@ func handle_menu_input(event: InputEvent) -> bool:
 			return true
 		if key in [KEY_RIGHT, KEY_D]:
 			adjust_start_level(1)
+			return true
+		if key in [KEY_UP, KEY_W]:
+			adjust_start_level(-5)
+			return true
+		if key in [KEY_DOWN, KEY_S]:
+			adjust_start_level(5)
 			return true
 		if key >= KEY_0 and key <= KEY_9:
 			set_start_level(key - KEY_0)

@@ -21,6 +21,16 @@ func run_test() -> void:
 		push_error("The title Start action should open level selection")
 		quit(1)
 		return
+	var down := InputEventKey.new()
+	down.physical_keycode = KEY_DOWN
+	down.pressed = true
+	game._input(down)
+	await process_frame
+	if game.state != game.State.LEVEL_SELECT or game.start_level != 5:
+		push_error("Down should move to the second level row without starting the game")
+		quit(1)
+		return
+	game.set_start_level(0)
 	var click_position := Vector2(124, 450)
 	var press := InputEventMouseButton.new()
 	press.position = click_position
