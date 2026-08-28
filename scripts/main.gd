@@ -13,7 +13,7 @@ const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
-const TOUCH_HORIZONTAL_STEP_PIXELS := 18.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 25.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
 const TOUCH_SWIPE_DROP_MAX_MS := 240
@@ -202,8 +202,8 @@ func set_line_clear_seconds(value: float) -> void:
 
 func create_music_button() -> void:
 	music_button = Button.new()
-	music_button.position = Vector2(264, 8)
-	music_button.size = Vector2(88, 30)
+	music_button.position = Vector2(154, 55)
+	music_button.size = Vector2(98, 23)
 	music_button.focus_mode = Control.FOCUS_NONE
 	music_button.add_theme_font_size_override("font_size", 11)
 	style_menu_button(music_button)
@@ -686,8 +686,8 @@ func draw_tile(cell: Vector2i, kind: String, alpha := 1.0, use_ghost := false) -
 	var pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
 	draw_tile_at(pos, kind, alpha, use_ghost)
 
-func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false) -> void:
-	var tile_size := float(GameConfig.CELL_SIZE)
+func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false, render_size := -1.0) -> void:
+	var tile_size := float(GameConfig.CELL_SIZE) if render_size <= 0.0 else render_size
 	var texture: Texture2D = ghost_texture if use_ghost else tile_textures.get(kind)
 	if texture:
 		draw_texture_rect(texture, Rect2(pos, Vector2(tile_size, tile_size)), false, Color(1, 1, 1, alpha))
@@ -723,11 +723,11 @@ func _draw() -> void:
 		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
-	draw_rect(Rect2(3, 18, 354, 548), Color(0.07,0.055,0.045,0.70))
+	draw_rect(Rect2(0, 0, 360, 640), Color(0.07,0.055,0.045,0.70))
 	if board_frame:
-		# The frame opening maps over the enlarged 180x360 board while preserving
-		# the original 10x20 gameplay grid.
-		draw_texture_rect(board_frame, Rect2(-23, 21, 281, 541), false)
+		# The side HUD is gone; the frame opening now maps over a centered 250x500
+		# board that uses nearly the full portrait height.
+		draw_texture_rect(board_frame, Rect2(-16, -33, 364, 753), false)
 	var board_rect := Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE)
 	draw_rect(board_rect, Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
@@ -750,11 +750,14 @@ func _draw() -> void:
 				draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
 			if cell.y >= 0: draw_tile(cell, active.kind)
-	var next_rect := Rect2(234, 124, 122, 120)
+	# Compact top HUD keeps all gameplay data clear of the playfield.
+	draw_rect(Rect2(0, 0, 360, 108), Color(0.055, 0.045, 0.038, 0.90))
+	draw_rect(Rect2(0, 106, 360, 2), WOOD_LIGHT)
+	var next_rect := Rect2(254, 4, 102, 98)
 	draw_panel(next_rect, "NEXT", "")
-	draw_panel(Rect2(234, 251, 122, 62), "SCORE", "%06d" % score)
-	draw_panel(Rect2(234, 319, 122, 62), "LEVEL", "%02d" % level)
-	draw_panel(Rect2(234, 387, 122, 62), "LINES", "%03d" % lines)
+	draw_panel(Rect2(54, 4, 98, 47), "SCORE", "%06d" % score)
+	draw_panel(Rect2(154, 4, 98, 47), "LEVEL", "%02d" % level)
+	draw_panel(Rect2(54, 55, 98, 47), "LINES", "%03d" % lines)
 	if next_kind != "":
 		var preview := Tetromino.new(next_kind)
 		var preview_cells := preview.cells(Vector2i.ZERO, 0)
@@ -765,17 +768,17 @@ func _draw() -> void:
 			min_cell.y = mini(min_cell.y, cell.y)
 			max_cell.x = maxi(max_cell.x, cell.x)
 			max_cell.y = maxi(max_cell.y, cell.y)
-		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * float(GameConfig.CELL_SIZE)
-		var preview_center := Vector2(next_rect.position.x + next_rect.size.x * 0.5, next_rect.position.y + 73.0)
-		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell * GameConfig.CELL_SIZE)
+		var preview_tile_size := 14.0
+		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * preview_tile_size
+		var preview_center := Vector2(next_rect.position.x + next_rect.size.x * 0.5, next_rect.position.y + 65.0)
+		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell) * preview_tile_size
 		for cell: Vector2i in preview_cells:
-			var p := preview_origin + Vector2(cell * GameConfig.CELL_SIZE)
-			draw_tile_at(p, next_kind)
+			var p := preview_origin + Vector2(cell) * preview_tile_size
+			draw_tile_at(p, next_kind, 1.0, false, preview_tile_size)
 	var cat_texture: Texture2D = happy_textures[cat_frame] if cat_happy_timer > 0.0 else idle_textures[cat_frame]
 	if cat_texture:
-		draw_texture_rect(cat_texture, Rect2(246, 454, 96, 108), false)
-	draw_string(ThemeDB.fallback_font, Vector2(238, 75), "COZY CAT", HORIZONTAL_ALIGNMENT_CENTER, 116, 15, CREAM)
-	draw_string(ThemeDB.fallback_font, Vector2(238, 98), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 116, 10, Color("c8ad7f"))
+		draw_texture_rect(cat_texture, Rect2(4, 39, 46, 63), false)
+	draw_string(ThemeDB.fallback_font, Vector2(154, 97), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 98, 10, Color("c8ad7f"))
 	if state == State.PAUSED:
 		draw_overlay("PAUSED", "P: RESUME   •   R: RETRY")
 	elif state == State.GAME_OVER:
