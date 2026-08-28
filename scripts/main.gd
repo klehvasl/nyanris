@@ -14,9 +14,10 @@ const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
 const TOUCH_CONTROLS_TOP := 572.0
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
-const TOUCH_HORIZONTAL_STEP_PIXELS := 14.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 16.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
-const TOUCH_HARD_DROP_PIXELS := 34.0
+const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
+const TOUCH_SWIPE_DROP_MAX_MS := 240
 
 var board := GameBoard.new()
 var active: Tetromino
@@ -40,6 +41,7 @@ var touch_last := Vector2.ZERO
 var touch_active := false
 var touch_index := -1
 var last_touch_event_msec := -1000000
+var touch_press_msec := 0
 var touch_gesture := TouchGesture.PENDING
 var touch_drag_remainder := Vector2.ZERO
 var cat_happy_timer := 0.0
@@ -471,6 +473,7 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		touch_index = event.index
 		touch_start = event.position
 		touch_last = event.position
+		touch_press_msec = Time.get_ticks_msec()
 		touch_drag_remainder = Vector2.ZERO
 		touch_gesture = TouchGesture.CONTROLS if event.position.y >= TOUCH_CONTROLS_TOP else TouchGesture.PENDING
 		return
@@ -478,6 +481,8 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		return
 	process_touch_motion(event.position)
 	var completed_gesture := touch_gesture
+	var completed_delta := event.position - touch_start
+	var gesture_duration_msec := Time.get_ticks_msec() - touch_press_msec
 	touch_active = false
 	touch_index = -1
 	if completed_gesture == TouchGesture.CONTROLS:
@@ -487,6 +492,11 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		else: hard_drop()
 	elif completed_gesture == TouchGesture.PENDING:
 		try_rotate()
+	elif completed_gesture == TouchGesture.VERTICAL \
+			and completed_delta.y >= TOUCH_SWIPE_DROP_MIN_PIXELS \
+			and absf(completed_delta.y) > absf(completed_delta.x) * 1.25 \
+			and gesture_duration_msec <= TOUCH_SWIPE_DROP_MAX_MS:
+		hard_drop()
 
 func handle_touch_drag(event: InputEventScreenDrag) -> void:
 	last_touch_event_msec = Time.get_ticks_msec()
@@ -502,12 +512,14 @@ func process_touch_motion(position: Vector2) -> void:
 	if touch_gesture == TouchGesture.PENDING:
 		if maxf(absf(total_delta.x), absf(total_delta.y)) < TOUCH_AXIS_LOCK_PIXELS:
 			return
-		if absf(total_delta.x) > absf(total_delta.y):
+		if absf(total_delta.x) > absf(total_delta.y) * 1.2:
 			touch_gesture = TouchGesture.HORIZONTAL
 			touch_drag_remainder.x = total_delta.x
-		else:
+		elif absf(total_delta.y) > absf(total_delta.x) * 1.2:
 			touch_gesture = TouchGesture.VERTICAL
 			touch_drag_remainder.y = total_delta.y
+		else:
+			return
 	elif touch_gesture == TouchGesture.HORIZONTAL:
 		touch_drag_remainder.x += frame_delta.x
 	elif touch_gesture == TouchGesture.VERTICAL:
@@ -519,10 +531,6 @@ func process_touch_motion(position: Vector2) -> void:
 			try_move(Vector2i(direction, 0))
 			touch_drag_remainder.x -= direction * TOUCH_HORIZONTAL_STEP_PIXELS
 	elif touch_gesture == TouchGesture.VERTICAL:
-		if total_delta.y <= -TOUCH_HARD_DROP_PIXELS:
-			touch_gesture = TouchGesture.HARD_DROP
-			hard_drop()
-			return
 		while touch_drag_remainder.y >= TOUCH_VERTICAL_STEP_PIXELS:
 			if try_move(Vector2i.DOWN):
 				score += 1
@@ -596,6 +604,8 @@ func try_move(offset: Vector2i) -> bool:
 		active.position = target
 		if offset.x != 0:
 			lock_timer = 0.0
+			if audio:
+				audio.play_move()
 		return true
 	return false
 

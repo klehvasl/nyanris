@@ -49,6 +49,9 @@ func set_gameplay_paused(paused: bool) -> void:
 func play_rotate() -> void:
 	play_tone(520.0, 0.045, 0.10)
 
+func play_move() -> void:
+	play_tone(285.0, 0.022, 0.045)
+
 func play_drop() -> void:
 	play_tone(150.0, 0.075, 0.14)
 
