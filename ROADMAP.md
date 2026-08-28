@@ -8,6 +8,9 @@
 - [x] Add authored looping title/gameplay music with a persistent mute preference.
 - [ ] Fine-tune frame/panel alignment after device playtesting and final asset review.
 - [ ] Add final sound effects and production volume controls.
+  - Normal landing: briefly and subtly flash the cells of the piece when it locks.
+  - Hard-drop landing: use a brighter piece flash alongside the pixel-comet and impact effects.
+  - Give normal downward movement/landing and hard drop clearly different sounds; keep the normal cue restrained and the hard-drop cue punchier.
 - [ ] Produce signed Android and iOS exports (requires Android signing setup and macOS/Xcode for iOS).
 
 ## V2 — post-release
