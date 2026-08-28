@@ -636,14 +636,14 @@ func build_hard_drop_shock() -> void:
 	var left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE)
 	var width := float((max_x - min_x + 1) * GameConfig.CELL_SIZE)
 	var floor_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE)
-	for i in 12:
-		var side := -1.0 if i < 6 else 1.0
-		var rank := i % 6
-		var color: Color = CREAM if i % 3 == 0 else GameConfig.COLORS[hard_drop_kind].lightened(0.28)
+	for i in 24:
+		var side := -1.0 if i < 12 else 1.0
+		var rank := i % 12
+		var color: Color = CREAM if i % 3 == 0 else GameConfig.COLORS[hard_drop_kind].lightened(0.42)
 		hard_drop_shock_pixels.append({
-			"origin": Vector2(left + width * (float(i) + 0.5) / 12.0, floor_y - 1.0),
-			"velocity": Vector2(side * (21.0 + rank * 7.0), -25.0 - float((i * 9) % 22)),
-			"size": 2.0 if i % 2 == 0 else 1.0,
+			"origin": Vector2(left + width * (float(i % 12) + 0.5) / 12.0, floor_y - 2.0 - float(i / 12) * 2.0),
+			"velocity": Vector2(side * (25.0 + rank * 5.0), -32.0 - float((i * 11) % 31)),
+			"size": 3.0 if i % 4 == 0 else 2.0,
 			"color": color,
 		})
 
@@ -809,19 +809,8 @@ func draw_game_over_overlay() -> void:
 func draw_hard_drop_fx() -> void:
 	var age := GameConfig.HARD_DROP_IMPACT_SECONDS - hard_drop_fx_timer
 	var trail_alpha := clampf(1.0 - age / GameConfig.HARD_DROP_TRAIL_SECONDS, 0.0, 1.0)
-	if trail_alpha > 0.0:
-		# Three readable silhouettes communicate distance better than abstract streaks.
-		for echo_index in 3:
-			var path_ratio := float(echo_index + 1) / 4.0
-			var echo_alpha := trail_alpha * (0.10 + echo_index * 0.07)
-			for i in mini(hard_drop_start_cells.size(), hard_drop_landed_cells.size()):
-				var start_cell: Vector2i = hard_drop_start_cells[i]
-				var end_cell: Vector2i = hard_drop_landed_cells[i]
-				var start_pixel := Vector2(GameConfig.BOARD_ORIGIN + start_cell * GameConfig.CELL_SIZE)
-				var end_pixel := Vector2(GameConfig.BOARD_ORIGIN + end_cell * GameConfig.CELL_SIZE)
-				var echo_position := start_pixel.lerp(end_pixel, path_ratio)
-				if echo_position.y >= GameConfig.BOARD_ORIGIN.y:
-					draw_tile_at(echo_position, hard_drop_kind, echo_alpha)
+	if trail_alpha > 0.0 and not hard_drop_landed_cells.is_empty():
+		draw_hard_drop_comet(trail_alpha)
 	var impact_progress := clampf(age / GameConfig.HARD_DROP_IMPACT_SECONDS, 0.0, 1.0)
 	var cell_size := float(GameConfig.CELL_SIZE)
 	var tile_width: float
@@ -847,6 +836,52 @@ func draw_hard_drop_fx() -> void:
 			draw_rect(impact_rect, GameConfig.COLORS[hard_drop_kind])
 	draw_hard_drop_pixel_shock(age)
 
+func draw_hard_drop_comet(alpha: float) -> void:
+	var cell_size := float(GameConfig.CELL_SIZE)
+	var min_x := 99
+	var max_x := -99
+	var start_top_row := 99
+	var landed_top_row := 99
+	for cell: Vector2i in hard_drop_landed_cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		landed_top_row = mini(landed_top_row, cell.y)
+	for cell: Vector2i in hard_drop_start_cells:
+		start_top_row = mini(start_top_row, cell.y)
+	var footprint_left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE)
+	var footprint_width := float((max_x - min_x + 1) * GameConfig.CELL_SIZE)
+	var center_x := footprint_left + footprint_width * 0.5
+	var trail_top := maxf(float(GameConfig.BOARD_ORIGIN.y), float(GameConfig.BOARD_ORIGIN.y + start_top_row * GameConfig.CELL_SIZE))
+	var trail_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.55)
+	var trail_length := maxf(cell_size, trail_bottom - trail_top)
+	var piece_color: Color = GameConfig.COLORS[hard_drop_kind]
+	var band_count := maxi(4, floori(trail_length / 5.0))
+	for band in band_count:
+		var from_head := float(band) / maxf(1.0, float(band_count - 1))
+		var y := trail_bottom - from_head * trail_length
+		var band_width := lerpf(footprint_width, maxf(7.0, footprint_width * 0.22), from_head)
+		var pixel_count := maxi(1, floori(band_width / 7.0))
+		var band_alpha := alpha * lerpf(0.92, 0.14, from_head)
+		for pixel_index in pixel_count:
+			# Deterministic offsets retain a crisp pixel-art texture instead of a
+			# smooth translucent column.
+			var normalized_x := (float(pixel_index) + 0.5) / float(pixel_count) - 0.5
+			var jitter := float(((band * 7 + pixel_index * 11) % 5) - 2)
+			var pixel_pos := Vector2(round(center_x + normalized_x * band_width + jitter), round(y))
+			var pixel_size := 4.0 if (band + pixel_index) % 7 == 0 else (3.0 if band % 3 == 0 else 2.0)
+			var color := Color(1.0, 0.97, 0.78, band_alpha) if band < 3 or (band + pixel_index) % 5 == 0 else piece_color.lightened(lerpf(0.62, 0.20, from_head))
+			color.a = band_alpha
+			draw_rect(Rect2(pixel_pos - Vector2(pixel_size * 0.5, pixel_size * 0.5), Vector2(pixel_size, pixel_size)), color)
+		if band % 5 == 1:
+			var star_side := -1.0 if band % 10 < 5 else 1.0
+			var star_pos := Vector2(round(center_x + star_side * band_width * 0.42), round(y))
+			draw_pixel_star(star_pos, 3.0 if band < 7 else 2.0, Color(1.0, 0.93, 0.64, band_alpha))
+
+func draw_pixel_star(position: Vector2, radius: float, color: Color) -> void:
+	draw_rect(Rect2(position - Vector2.ONE, Vector2(3, 3)), color)
+	draw_rect(Rect2(position + Vector2(-radius - 1.0, 0), Vector2(radius * 2.0 + 3.0, 1)), color)
+	draw_rect(Rect2(position + Vector2(0, -radius - 1.0), Vector2(1, radius * 2.0 + 3.0)), color)
+
 func draw_hard_drop_pixel_shock(age: float) -> void:
 	var life := GameConfig.HARD_DROP_IMPACT_SECONDS
 	var alpha := clampf(1.0 - age / life, 0.0, 1.0)
@@ -859,15 +894,19 @@ func draw_hard_drop_pixel_shock(age: float) -> void:
 		min_x = mini(min_x, cell.x)
 		max_x = maxi(max_x, cell.x)
 		bottom_y = maxi(bottom_y, cell.y + 1)
-	if age < 0.055:
-		var shock_alpha := 1.0 - age / 0.055
+	if age < 0.12:
+		var shock_alpha := 1.0 - age / 0.12
 		var line_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE - 1)
-		var contact_expand := age / 0.055 * 5.0
+		var contact_expand := age / 0.12 * 10.0
 		var line_left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE - 5) - contact_expand
 		var line_right := float(GameConfig.BOARD_ORIGIN.x + (max_x + 1) * GameConfig.CELL_SIZE + 5) + contact_expand
-		draw_line(Vector2(line_left, line_y), Vector2(line_right, line_y), Color(1.0, 0.88, 0.58, shock_alpha), 2.0)
-		draw_rect(Rect2(Vector2(line_left - 2.0, line_y - 2.0), Vector2(2, 2)), Color(1.0, 0.88, 0.58, shock_alpha))
-		draw_rect(Rect2(Vector2(line_right, line_y - 2.0), Vector2(2, 2)), Color(1.0, 0.88, 0.58, shock_alpha))
+		var hot := Color(1.0, 0.98, 0.78, shock_alpha)
+		var glow: Color = GameConfig.COLORS[hard_drop_kind].lightened(0.48)
+		glow.a = shock_alpha * 0.78
+		draw_line(Vector2(line_left, line_y), Vector2(line_right, line_y), glow, 3.0)
+		draw_line(Vector2(line_left + 2.0, line_y - 1.0), Vector2(line_right - 2.0, line_y - 1.0), hot, 1.0)
+		draw_pixel_star(Vector2(line_left, line_y - 1.0), 3.0, hot)
+		draw_pixel_star(Vector2(line_right, line_y - 1.0), 3.0, hot)
 	for pixel in hard_drop_shock_pixels:
 		var origin: Vector2 = pixel["origin"]
 		var velocity: Vector2 = pixel["velocity"]

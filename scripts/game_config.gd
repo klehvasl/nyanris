@@ -12,8 +12,8 @@ const MAX_LEVEL := 9
 const DAS_SECONDS := 0.16
 const ARR_SECONDS := 0.055
 const SOFT_DROP_SECONDS := 0.075
-const HARD_DROP_TRAIL_SECONDS := 0.08
-const HARD_DROP_IMPACT_SECONDS := 0.15
+const HARD_DROP_TRAIL_SECONDS := 0.20
+const HARD_DROP_IMPACT_SECONDS := 0.28
 
 # Original Game Boy Tetris normal level 0-9 timings, expressed as frames per row.
 # The hardware runs at about 59.73 Hz; 60 Hz is used here for stable cross-platform timing.

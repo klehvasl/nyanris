@@ -67,7 +67,7 @@ func run_test() -> void:
 		quit(1)
 		return
 	game.hard_drop()
-	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != 4 or game.hard_drop_shock_pixels.size() != 12:
+	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != 4 or game.hard_drop_shock_pixels.size() != 24:
 		push_error("Hard drop should begin the visual trail and impact overlay")
 		quit(1)
 		return

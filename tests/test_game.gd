@@ -71,8 +71,8 @@ func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.LOCK_DELAY_SECONDS, 0.35), "Lock delay should be 350 ms")
 	check(is_equal_approx(GameConfig.SOFT_DROP_SECONDS, 0.075), "Soft drop should move at 75 ms per row")
 	check(is_equal_approx(GameConfig.LINE_CLEAR_SECONDS, 0.35), "Line clear pause should be 350 ms")
-	check(is_equal_approx(GameConfig.HARD_DROP_TRAIL_SECONDS, 0.08), "Hard-drop afterimages should last 80 ms")
-	check(is_equal_approx(GameConfig.HARD_DROP_IMPACT_SECONDS, 0.15), "Hard-drop impact should last 150 ms")
+	check(is_equal_approx(GameConfig.HARD_DROP_TRAIL_SECONDS, 0.20), "Hard-drop pixel trail should last 200 ms")
+	check(is_equal_approx(GameConfig.HARD_DROP_IMPACT_SECONDS, 0.28), "Hard-drop impact should remain visible for 280 ms")
 	check(GameConfig.LINE_POINTS[4] == 1200, "Four-line base score should be 1200")
 
 func test_seven_bag() -> void:
