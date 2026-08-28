@@ -3,8 +3,8 @@ extends RefCounted
 
 const LOGICAL_SIZE := Vector2i(360, 640)
 const BOARD_SIZE := Vector2i(10, 20)
-const CELL_SIZE := 16
-const BOARD_ORIGIN := Vector2i(36, 172)
+const CELL_SIZE := 18
+const BOARD_ORIGIN := Vector2i(27, 124)
 const PIECE_KINDS := ["I", "J", "L", "O", "S", "T", "Z"]
 const LINE_CLEAR_SECONDS := 0.35
 const LOCK_DELAY_SECONDS := 0.35

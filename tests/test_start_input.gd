@@ -108,7 +108,7 @@ func run_test() -> void:
 	game._input(drag_press)
 	var horizontal_drag := InputEventScreenDrag.new()
 	horizontal_drag.index = 0
-	horizontal_drag.position = Vector2(116, 300)
+	horizontal_drag.position = Vector2(100 + GameConfig.CELL_SIZE, 300)
 	game._input(horizontal_drag)
 	if game.active.position.x != 4 or game.active.rotation != 0:
 		push_error("Horizontal touch drag should move one cell immediately without rotating")
@@ -116,7 +116,7 @@ func run_test() -> void:
 		return
 	var drag_release := InputEventScreenTouch.new()
 	drag_release.index = 0
-	drag_release.position = Vector2(116, 300)
+	drag_release.position = Vector2(100 + GameConfig.CELL_SIZE, 300)
 	drag_release.pressed = false
 	game._input(drag_release)
 	if game.active.position.x != 4 or game.active.rotation != 0:

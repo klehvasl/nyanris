@@ -12,9 +12,8 @@ const LEVEL_GRID_ORIGIN := Vector2(58, 434)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
-const TOUCH_CONTROLS_TOP := 572.0
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
-const TOUCH_HORIZONTAL_STEP_PIXELS := 16.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 18.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
 const TOUCH_SWIPE_DROP_MAX_MS := 240
@@ -450,17 +449,9 @@ func level_button_rect(level_number: int) -> Rect2:
 	return Rect2(LEVEL_GRID_ORIGIN + Vector2(column, row) * (LEVEL_BUTTON_SIZE + LEVEL_BUTTON_GAP), LEVEL_BUTTON_SIZE)
 
 func handle_mouse_click(position: Vector2) -> void:
-	if position.y >= 572.0:
-		if position.x < 90.0:
-			try_move(Vector2i.LEFT)
-		elif position.x < 180.0:
-			try_rotate()
-		elif position.x < 270.0:
-			try_move(Vector2i.RIGHT)
-		else:
-			hard_drop()
-	else:
-		try_rotate()
+	if music_button and music_button.get_global_rect().has_point(position):
+		return
+	try_rotate()
 
 func handle_touch(event: InputEventScreenTouch) -> void:
 	last_touch_event_msec = Time.get_ticks_msec()
@@ -475,7 +466,7 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		touch_last = event.position
 		touch_press_msec = Time.get_ticks_msec()
 		touch_drag_remainder = Vector2.ZERO
-		touch_gesture = TouchGesture.CONTROLS if event.position.y >= TOUCH_CONTROLS_TOP else TouchGesture.PENDING
+		touch_gesture = TouchGesture.CONTROLS if music_button and music_button.get_global_rect().has_point(event.position) else TouchGesture.PENDING
 		return
 	if not touch_active or event.index != touch_index:
 		return
@@ -485,12 +476,7 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 	var gesture_duration_msec := Time.get_ticks_msec() - touch_press_msec
 	touch_active = false
 	touch_index = -1
-	if completed_gesture == TouchGesture.CONTROLS:
-		if touch_start.x < 90.0: try_move(Vector2i.LEFT)
-		elif touch_start.x < 180.0: try_rotate()
-		elif touch_start.x < 270.0: try_move(Vector2i.RIGHT)
-		else: hard_drop()
-	elif completed_gesture == TouchGesture.PENDING:
+	if completed_gesture == TouchGesture.PENDING:
 		try_rotate()
 	elif completed_gesture == TouchGesture.VERTICAL \
 			and completed_delta.y >= TOUCH_SWIPE_DROP_MIN_PIXELS \
@@ -647,9 +633,9 @@ func build_hard_drop_shock() -> void:
 		min_x = mini(min_x, cell.x)
 		max_x = maxi(max_x, cell.x)
 		bottom_y = maxi(bottom_y, cell.y + 1)
-	var left := float(GameConfig.BOARD_ORIGIN.x + min_x * 16)
-	var width := float((max_x - min_x + 1) * 16)
-	var floor_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * 16)
+	var left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE)
+	var width := float((max_x - min_x + 1) * GameConfig.CELL_SIZE)
+	var floor_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE)
 	for i in 12:
 		var side := -1.0 if i < 6 else 1.0
 		var rank := i % 6
@@ -701,18 +687,19 @@ func draw_tile(cell: Vector2i, kind: String, alpha := 1.0, use_ghost := false) -
 	draw_tile_at(pos, kind, alpha, use_ghost)
 
 func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false) -> void:
+	var tile_size := float(GameConfig.CELL_SIZE)
 	var texture: Texture2D = ghost_texture if use_ghost else tile_textures.get(kind)
 	if texture:
-		draw_texture_rect(texture, Rect2(pos, Vector2(16, 16)), false, Color(1, 1, 1, alpha))
+		draw_texture_rect(texture, Rect2(pos, Vector2(tile_size, tile_size)), false, Color(1, 1, 1, alpha))
 		return
 	var color: Color = GameConfig.COLORS[kind]
 	color.a = alpha
-	draw_rect(Rect2(pos, Vector2(16,16)), color)
-	draw_rect(Rect2(pos + Vector2(1,1), Vector2(14,14)), color.lightened(0.13), false, 1.0)
-	draw_line(pos + Vector2(2,2), pos + Vector2(13,2), Color(1,1,1,0.24 * alpha), 1.0)
-	draw_line(pos + Vector2(2,2), pos + Vector2(2,13), Color(1,1,1,0.20 * alpha), 1.0)
-	draw_line(pos + Vector2(2,14), pos + Vector2(14,14), Color(0,0,0,0.30 * alpha), 1.0)
-	draw_line(pos + Vector2(14,2), pos + Vector2(14,14), Color(0,0,0,0.30 * alpha), 1.0)
+	draw_rect(Rect2(pos, Vector2(tile_size, tile_size)), color)
+	draw_rect(Rect2(pos + Vector2.ONE, Vector2(tile_size - 2.0, tile_size - 2.0)), color.lightened(0.13), false, 1.0)
+	draw_line(pos + Vector2(2,2), pos + Vector2(tile_size - 3.0, 2), Color(1,1,1,0.24 * alpha), 1.0)
+	draw_line(pos + Vector2(2,2), pos + Vector2(2, tile_size - 3.0), Color(1,1,1,0.20 * alpha), 1.0)
+	draw_line(pos + Vector2(2, tile_size - 2.0), pos + Vector2(tile_size - 2.0, tile_size - 2.0), Color(0,0,0,0.30 * alpha), 1.0)
+	draw_line(pos + Vector2(tile_size - 2.0, 2), pos + Vector2(tile_size - 2.0, tile_size - 2.0), Color(0,0,0,0.30 * alpha), 1.0)
 
 func draw_panel(rect: Rect2, title: String, value: String) -> void:
 	var texture: Texture2D = panel_textures.get(title)
@@ -736,11 +723,11 @@ func _draw() -> void:
 		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
-	draw_rect(Rect2(4, 76, 352, 488), Color(0.07,0.055,0.045,0.70))
+	draw_rect(Rect2(3, 18, 354, 548), Color(0.07,0.055,0.045,0.70))
 	if board_frame:
-		# Frame V2 is maximized vertically. Its source opening (approximately
-		# x166..776, y316..1420) maps directly over the exact 160x320 board.
-		draw_texture_rect(board_frame, Rect2(-8, 80, 249, 481), false)
+		# The frame opening maps over the enlarged 180x360 board while preserving
+		# the original 10x20 gameplay grid.
+		draw_texture_rect(board_frame, Rect2(-23, 21, 281, 541), false)
 	var board_rect := Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE)
 	draw_rect(board_rect, Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
@@ -763,11 +750,11 @@ func _draw() -> void:
 				draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
 			if cell.y >= 0: draw_tile(cell, active.kind)
-	var next_rect := Rect2(240, 145, 112, 110)
+	var next_rect := Rect2(234, 124, 122, 120)
 	draw_panel(next_rect, "NEXT", "")
-	draw_panel(Rect2(240, 263, 112, 58), "SCORE", "%06d" % score)
-	draw_panel(Rect2(240, 328, 112, 58), "LEVEL", "%02d" % level)
-	draw_panel(Rect2(240, 393, 112, 58), "LINES", "%03d" % lines)
+	draw_panel(Rect2(234, 251, 122, 62), "SCORE", "%06d" % score)
+	draw_panel(Rect2(234, 319, 122, 62), "LEVEL", "%02d" % level)
+	draw_panel(Rect2(234, 387, 122, 62), "LINES", "%03d" % lines)
 	if next_kind != "":
 		var preview := Tetromino.new(next_kind)
 		var preview_cells := preview.cells(Vector2i.ZERO, 0)
@@ -778,19 +765,17 @@ func _draw() -> void:
 			min_cell.y = mini(min_cell.y, cell.y)
 			max_cell.x = maxi(max_cell.x, cell.x)
 			max_cell.y = maxi(max_cell.y, cell.y)
-		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * 16.0
+		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * float(GameConfig.CELL_SIZE)
 		var preview_center := Vector2(next_rect.position.x + next_rect.size.x * 0.5, next_rect.position.y + 73.0)
-		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell * 16)
+		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell * GameConfig.CELL_SIZE)
 		for cell: Vector2i in preview_cells:
-			var p := preview_origin + Vector2(cell * 16)
+			var p := preview_origin + Vector2(cell * GameConfig.CELL_SIZE)
 			draw_tile_at(p, next_kind)
 	var cat_texture: Texture2D = happy_textures[cat_frame] if cat_happy_timer > 0.0 else idle_textures[cat_frame]
 	if cat_texture:
-		draw_texture_rect(cat_texture, Rect2(252, 454, 84, 101), false)
-	draw_string(ThemeDB.fallback_font, Vector2(12, 38), "COZY CAT BLOCKS", HORIZONTAL_ALIGNMENT_CENTER, 235, 18, CREAM)
-	draw_string(ThemeDB.fallback_font, Vector2(12, 61), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 235, 11, Color("c8ad7f"))
-	if state in [State.PLAYING, State.PAUSED]:
-		draw_touch_controls()
+		draw_texture_rect(cat_texture, Rect2(246, 454, 96, 108), false)
+	draw_string(ThemeDB.fallback_font, Vector2(238, 75), "COZY CAT", HORIZONTAL_ALIGNMENT_CENTER, 116, 15, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(238, 98), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 116, 10, Color("c8ad7f"))
 	if state == State.PAUSED:
 		draw_overlay("PAUSED", "P: RESUME   •   R: RETRY")
 	elif state == State.GAME_OVER:
@@ -832,29 +817,30 @@ func draw_hard_drop_fx() -> void:
 			for i in mini(hard_drop_start_cells.size(), hard_drop_landed_cells.size()):
 				var start_cell: Vector2i = hard_drop_start_cells[i]
 				var end_cell: Vector2i = hard_drop_landed_cells[i]
-				var start_pixel := Vector2(GameConfig.BOARD_ORIGIN + start_cell * 16)
-				var end_pixel := Vector2(GameConfig.BOARD_ORIGIN + end_cell * 16)
+				var start_pixel := Vector2(GameConfig.BOARD_ORIGIN + start_cell * GameConfig.CELL_SIZE)
+				var end_pixel := Vector2(GameConfig.BOARD_ORIGIN + end_cell * GameConfig.CELL_SIZE)
 				var echo_position := start_pixel.lerp(end_pixel, path_ratio)
 				if echo_position.y >= GameConfig.BOARD_ORIGIN.y:
 					draw_tile_at(echo_position, hard_drop_kind, echo_alpha)
 	var impact_progress := clampf(age / GameConfig.HARD_DROP_IMPACT_SECONDS, 0.0, 1.0)
+	var cell_size := float(GameConfig.CELL_SIZE)
 	var tile_width: float
 	var tile_height: float
 	if impact_progress < 0.45:
 		var rebound := smoothstep(0.0, 1.0, impact_progress / 0.45)
-		tile_width = lerpf(19.0, 15.0, rebound)
-		tile_height = lerpf(7.0, 17.5, rebound)
+		tile_width = lerpf(cell_size + 3.0, cell_size - 1.0, rebound)
+		tile_height = lerpf(cell_size * 0.44, cell_size + 1.5, rebound)
 	else:
 		var settle := smoothstep(0.0, 1.0, (impact_progress - 0.45) / 0.55)
-		tile_width = lerpf(15.5, 16.0, settle)
-		tile_height = lerpf(17.0, 16.0, settle)
+		tile_width = lerpf(cell_size - 0.5, cell_size, settle)
+		tile_height = lerpf(cell_size + 1.0, cell_size, settle)
 	var texture: Texture2D = tile_textures.get(hard_drop_kind)
 	for cell: Vector2i in hard_drop_landed_cells:
 		if cell.y < 0:
 			continue
-		var tile_pos := Vector2(GameConfig.BOARD_ORIGIN + cell * 16)
-		draw_rect(Rect2(tile_pos, Vector2(16,16)), Color("151719"))
-		var impact_rect := Rect2(tile_pos + Vector2((16.0 - tile_width) * 0.5, (16.0 - tile_height) * 0.5), Vector2(tile_width, tile_height))
+		var tile_pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
+		draw_rect(Rect2(tile_pos, Vector2(cell_size, cell_size)), Color("151719"))
+		var impact_rect := Rect2(tile_pos + Vector2((cell_size - tile_width) * 0.5, (cell_size - tile_height) * 0.5), Vector2(tile_width, tile_height))
 		if texture:
 			draw_texture_rect(texture, impact_rect, false)
 		else:
@@ -875,10 +861,10 @@ func draw_hard_drop_pixel_shock(age: float) -> void:
 		bottom_y = maxi(bottom_y, cell.y + 1)
 	if age < 0.055:
 		var shock_alpha := 1.0 - age / 0.055
-		var line_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * 16 - 1)
+		var line_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE - 1)
 		var contact_expand := age / 0.055 * 5.0
-		var line_left := float(GameConfig.BOARD_ORIGIN.x + min_x * 16 - 5) - contact_expand
-		var line_right := float(GameConfig.BOARD_ORIGIN.x + (max_x + 1) * 16 + 5) + contact_expand
+		var line_left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE - 5) - contact_expand
+		var line_right := float(GameConfig.BOARD_ORIGIN.x + (max_x + 1) * GameConfig.CELL_SIZE + 5) + contact_expand
 		draw_line(Vector2(line_left, line_y), Vector2(line_right, line_y), Color(1.0, 0.88, 0.58, shock_alpha), 2.0)
 		draw_rect(Rect2(Vector2(line_left - 2.0, line_y - 2.0), Vector2(2, 2)), Color(1.0, 0.88, 0.58, shock_alpha))
 		draw_rect(Rect2(Vector2(line_right, line_y - 2.0), Vector2(2, 2)), Color(1.0, 0.88, 0.58, shock_alpha))
@@ -898,21 +884,14 @@ func draw_line_clear_fx() -> void:
 	for row in clearing_rows:
 		var row_y := float(GameConfig.BOARD_ORIGIN.y + row * GameConfig.CELL_SIZE)
 		var wipe := smoothstep(0.0, 1.0, clampf((progress - 0.16) / 0.62, 0.0, 1.0))
-		var half_width := 80.0 * wipe
-		draw_rect(Rect2(board_center - half_width, row_y, half_width * 2.0, 16), Color("151719"))
+		var half_width := GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE * 0.5 * wipe
+		draw_rect(Rect2(board_center - half_width, row_y, half_width * 2.0, GameConfig.CELL_SIZE), Color("151719"))
 		if not line_clear_frames.is_empty():
 			var frame_index := mini(floori(progress * line_clear_frames.size()), line_clear_frames.size() - 1)
 			# Keep the glow focused around the cleared row instead of covering nearby play.
-			var effect_rect := Rect2(board_center - 96.0, row_y - 8.0, 192, 32)
+			var effect_width := GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE + 32.0
+			var effect_rect := Rect2(board_center - effect_width * 0.5, row_y - GameConfig.CELL_SIZE * 0.5, effect_width, GameConfig.CELL_SIZE * 2.0)
 			draw_texture_rect(line_clear_frames[frame_index], effect_rect, false, Color(1, 1, 1, 0.90))
-
-func draw_touch_controls() -> void:
-	var labels := ["LEFT", "TURN", "RIGHT", "DROP"]
-	for i in 4:
-		var rect := Rect2(i * 90 + 3, 580, 84, 48)
-		draw_rect(rect, Color(0.12,0.10,0.08,0.82))
-		draw_rect(rect, Color("b28a59"), false, 2.0)
-		draw_string(ThemeDB.fallback_font, rect.position + Vector2(4,29), labels[i], HORIZONTAL_ALIGNMENT_CENTER, 76, 12, CREAM)
 
 func draw_overlay(title: String, subtitle: String) -> void:
 	var rect := Rect2(38, 215, 284, 224) if subtitle == "" else Rect2(38, 250, 284, 112)
