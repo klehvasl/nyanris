@@ -162,5 +162,38 @@ func run_test() -> void:
 		push_error("A quick downward swipe should hard-drop and spawn the next piece")
 		quit(1)
 		return
+	# A player must be able to position horizontally and then turn the same
+	# held-finger gesture downward for a decisive hard drop.
+	game.active = Tetromino.new("T")
+	var combined_piece = game.active
+	var combined_press := InputEventScreenTouch.new()
+	combined_press.index = 0
+	combined_press.position = Vector2(100, 300)
+	combined_press.pressed = true
+	game._input(combined_press)
+	var combined_horizontal := InputEventScreenDrag.new()
+	combined_horizontal.index = 0
+	combined_horizontal.position = Vector2(100 + GameConfig.CELL_SIZE, 300)
+	game._input(combined_horizontal)
+	if game.active.position.x != 4:
+		push_error("Combined gesture should first position the piece horizontally")
+		quit(1)
+		return
+	var combined_turn_down := InputEventScreenDrag.new()
+	combined_turn_down.index = 0
+	combined_turn_down.position = Vector2(100 + GameConfig.CELL_SIZE, 320)
+	game._input(combined_turn_down)
+	if game.active != combined_piece:
+		push_error("Initial downward turn should soft-drop before it becomes decisive")
+		quit(1)
+		return
+	var combined_swipe_down := InputEventScreenDrag.new()
+	combined_swipe_down.index = 0
+	combined_swipe_down.position = Vector2(100 + GameConfig.CELL_SIZE, 350)
+	game._input(combined_swipe_down)
+	if game.active == combined_piece:
+		push_error("Horizontal movement followed by a decisive down swipe should hard-drop without lifting")
+		quit(1)
+		return
 	print("PASS: Space starts the game")
 	quit(0)

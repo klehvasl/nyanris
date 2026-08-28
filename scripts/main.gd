@@ -15,6 +15,7 @@ const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
 const TOUCH_HORIZONTAL_STEP_PIXELS := 25.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
+const TOUCH_AXIS_CHANGE_PIXELS := 18.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
 const TOUCH_SWIPE_DROP_MAX_MS := 240
 
@@ -43,6 +44,10 @@ var last_touch_event_msec := -1000000
 var touch_press_msec := 0
 var touch_gesture := TouchGesture.PENDING
 var touch_drag_remainder := Vector2.ZERO
+var touch_down_transition := 0.0
+var touch_transition_start_msec := 0
+var touch_vertical_start_y := 0.0
+var touch_vertical_start_msec := 0
 var cat_happy_timer := 0.0
 var cat_frame_timer := 0.0
 var cat_frame := 0
@@ -466,23 +471,20 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		touch_last = event.position
 		touch_press_msec = Time.get_ticks_msec()
 		touch_drag_remainder = Vector2.ZERO
+		touch_down_transition = 0.0
+		touch_transition_start_msec = touch_press_msec
+		touch_vertical_start_y = event.position.y
+		touch_vertical_start_msec = touch_press_msec
 		touch_gesture = TouchGesture.CONTROLS if music_button and music_button.get_global_rect().has_point(event.position) else TouchGesture.PENDING
 		return
 	if not touch_active or event.index != touch_index:
 		return
 	process_touch_motion(event.position)
 	var completed_gesture := touch_gesture
-	var completed_delta := event.position - touch_start
-	var gesture_duration_msec := Time.get_ticks_msec() - touch_press_msec
 	touch_active = false
 	touch_index = -1
 	if completed_gesture == TouchGesture.PENDING:
 		try_rotate()
-	elif completed_gesture == TouchGesture.VERTICAL \
-			and completed_delta.y >= TOUCH_SWIPE_DROP_MIN_PIXELS \
-			and absf(completed_delta.y) > absf(completed_delta.x) * 1.25 \
-			and gesture_duration_msec <= TOUCH_SWIPE_DROP_MAX_MS:
-		hard_drop()
 
 func handle_touch_drag(event: InputEventScreenDrag) -> void:
 	last_touch_event_msec = Time.get_ticks_msec()
@@ -490,6 +492,7 @@ func handle_touch_drag(event: InputEventScreenDrag) -> void:
 		process_touch_motion(event.position)
 
 func process_touch_motion(position: Vector2) -> void:
+	var now_msec := Time.get_ticks_msec()
 	var frame_delta := position - touch_last
 	touch_last = position
 	if touch_gesture in [TouchGesture.CONTROLS, TouchGesture.HARD_DROP]:
@@ -504,10 +507,25 @@ func process_touch_motion(position: Vector2) -> void:
 		elif absf(total_delta.y) > absf(total_delta.x) * 1.2:
 			touch_gesture = TouchGesture.VERTICAL
 			touch_drag_remainder.y = total_delta.y
+			touch_vertical_start_y = touch_start.y
+			touch_vertical_start_msec = touch_press_msec
 		else:
 			return
 	elif touch_gesture == TouchGesture.HORIZONTAL:
-		touch_drag_remainder.x += frame_delta.x
+		# Once horizontal positioning stops, a sustained, clearly downward turn
+		# can take ownership without requiring the finger to lift first.
+		if frame_delta.y > absf(frame_delta.x) * 1.25:
+			if touch_down_transition <= 0.0:
+				touch_transition_start_msec = now_msec
+			touch_down_transition += frame_delta.y
+			if touch_down_transition >= TOUCH_AXIS_CHANGE_PIXELS:
+				touch_gesture = TouchGesture.VERTICAL
+				touch_vertical_start_y = position.y - touch_down_transition
+				touch_vertical_start_msec = touch_transition_start_msec
+				touch_drag_remainder.y = touch_down_transition
+		else:
+			touch_down_transition = 0.0
+			touch_drag_remainder.x += frame_delta.x
 	elif touch_gesture == TouchGesture.VERTICAL:
 		touch_drag_remainder.y += frame_delta.y
 
@@ -517,6 +535,12 @@ func process_touch_motion(position: Vector2) -> void:
 			try_move(Vector2i(direction, 0))
 			touch_drag_remainder.x -= direction * TOUCH_HORIZONTAL_STEP_PIXELS
 	elif touch_gesture == TouchGesture.VERTICAL:
+		var vertical_distance := position.y - touch_vertical_start_y
+		var vertical_duration := now_msec - touch_vertical_start_msec
+		if vertical_distance >= TOUCH_SWIPE_DROP_MIN_PIXELS and vertical_duration <= TOUCH_SWIPE_DROP_MAX_MS:
+			touch_gesture = TouchGesture.HARD_DROP
+			hard_drop()
+			return
 		while touch_drag_remainder.y >= TOUCH_VERTICAL_STEP_PIXELS:
 			if try_move(Vector2i.DOWN):
 				score += 1
