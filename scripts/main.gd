@@ -1,6 +1,7 @@
 extends Control
 
 enum State { TITLE, LEVEL_SELECT, PLAYING, CLEARING, PAUSED, GAME_OVER }
+enum TouchGesture { PENDING, HORIZONTAL, VERTICAL, HARD_DROP, CONTROLS }
 
 const PANEL := Color("1d1b1a")
 const CREAM := Color("efe2be")
@@ -11,6 +12,11 @@ const LEVEL_GRID_ORIGIN := Vector2(58, 434)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
+const TOUCH_CONTROLS_TOP := 572.0
+const TOUCH_AXIS_LOCK_PIXELS := 10.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 14.0
+const TOUCH_VERTICAL_STEP_PIXELS := 12.0
+const TOUCH_HARD_DROP_PIXELS := 34.0
 
 var board := GameBoard.new()
 var active: Tetromino
@@ -34,6 +40,8 @@ var touch_last := Vector2.ZERO
 var touch_active := false
 var touch_index := -1
 var last_touch_event_msec := -1000000
+var touch_gesture := TouchGesture.PENDING
+var touch_drag_remainder := Vector2.ZERO
 var cat_happy_timer := 0.0
 var cat_frame_timer := 0.0
 var cat_frame := 0
@@ -463,34 +471,62 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		touch_index = event.index
 		touch_start = event.position
 		touch_last = event.position
+		touch_drag_remainder = Vector2.ZERO
+		touch_gesture = TouchGesture.CONTROLS if event.position.y >= TOUCH_CONTROLS_TOP else TouchGesture.PENDING
 		return
 	if not touch_active or event.index != touch_index:
 		return
-	touch_last = event.position
+	process_touch_motion(event.position)
+	var completed_gesture := touch_gesture
 	touch_active = false
 	touch_index = -1
-	var delta := touch_last - touch_start
-	if touch_start.y >= 572.0:
+	if completed_gesture == TouchGesture.CONTROLS:
 		if touch_start.x < 90.0: try_move(Vector2i.LEFT)
 		elif touch_start.x < 180.0: try_rotate()
 		elif touch_start.x < 270.0: try_move(Vector2i.RIGHT)
 		else: hard_drop()
-	elif abs(delta.x) > abs(delta.y) and abs(delta.x) > 18.0:
-		var steps := clampi(roundi(abs(delta.x) / 22.0), 1, 5)
-		for i in steps: try_move(Vector2i(sign(delta.x), 0))
-	elif delta.y > 20.0:
-		var steps := clampi(roundi(delta.y / 18.0), 1, 8)
-		for i in steps:
-			if try_move(Vector2i.DOWN): score += 1
-	elif delta.y < -28.0:
-		hard_drop()
-	else:
+	elif completed_gesture == TouchGesture.PENDING:
 		try_rotate()
 
 func handle_touch_drag(event: InputEventScreenDrag) -> void:
 	last_touch_event_msec = Time.get_ticks_msec()
 	if touch_active and event.index == touch_index:
-		touch_last = event.position
+		process_touch_motion(event.position)
+
+func process_touch_motion(position: Vector2) -> void:
+	var frame_delta := position - touch_last
+	touch_last = position
+	if touch_gesture in [TouchGesture.CONTROLS, TouchGesture.HARD_DROP]:
+		return
+	var total_delta := position - touch_start
+	if touch_gesture == TouchGesture.PENDING:
+		if maxf(absf(total_delta.x), absf(total_delta.y)) < TOUCH_AXIS_LOCK_PIXELS:
+			return
+		if absf(total_delta.x) > absf(total_delta.y):
+			touch_gesture = TouchGesture.HORIZONTAL
+			touch_drag_remainder.x = total_delta.x
+		else:
+			touch_gesture = TouchGesture.VERTICAL
+			touch_drag_remainder.y = total_delta.y
+	elif touch_gesture == TouchGesture.HORIZONTAL:
+		touch_drag_remainder.x += frame_delta.x
+	elif touch_gesture == TouchGesture.VERTICAL:
+		touch_drag_remainder.y += frame_delta.y
+
+	if touch_gesture == TouchGesture.HORIZONTAL:
+		while absf(touch_drag_remainder.x) >= TOUCH_HORIZONTAL_STEP_PIXELS:
+			var direction := 1 if touch_drag_remainder.x > 0.0 else -1
+			try_move(Vector2i(direction, 0))
+			touch_drag_remainder.x -= direction * TOUCH_HORIZONTAL_STEP_PIXELS
+	elif touch_gesture == TouchGesture.VERTICAL:
+		if total_delta.y <= -TOUCH_HARD_DROP_PIXELS:
+			touch_gesture = TouchGesture.HARD_DROP
+			hard_drop()
+			return
+		while touch_drag_remainder.y >= TOUCH_VERTICAL_STEP_PIXELS:
+			if try_move(Vector2i.DOWN):
+				score += 1
+			touch_drag_remainder.y -= TOUCH_VERTICAL_STEP_PIXELS
 
 func should_handle_pointer_mouse() -> bool:
 	# Android/iOS commonly synthesize a mouse click from every screen touch.

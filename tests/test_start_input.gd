@@ -99,5 +99,42 @@ func run_test() -> void:
 		push_error("A touch followed by its emulated mouse click should rotate only once")
 		quit(1)
 		return
+	# Dragging should move during the drag instead of batching movement at release.
+	game.active = Tetromino.new("T")
+	var drag_press := InputEventScreenTouch.new()
+	drag_press.index = 0
+	drag_press.position = Vector2(100, 300)
+	drag_press.pressed = true
+	game._input(drag_press)
+	var horizontal_drag := InputEventScreenDrag.new()
+	horizontal_drag.index = 0
+	horizontal_drag.position = Vector2(115, 300)
+	game._input(horizontal_drag)
+	if game.active.position.x != 4 or game.active.rotation != 0:
+		push_error("Horizontal touch drag should move one cell immediately without rotating")
+		quit(1)
+		return
+	var drag_release := InputEventScreenTouch.new()
+	drag_release.index = 0
+	drag_release.position = Vector2(115, 300)
+	drag_release.pressed = false
+	game._input(drag_release)
+	if game.active.position.x != 4 or game.active.rotation != 0:
+		push_error("Releasing a completed horizontal drag should not add another action")
+		quit(1)
+		return
+	var down_press := InputEventScreenTouch.new()
+	down_press.index = 0
+	down_press.position = Vector2(180, 250)
+	down_press.pressed = true
+	game._input(down_press)
+	var down_drag := InputEventScreenDrag.new()
+	down_drag.index = 0
+	down_drag.position = Vector2(180, 263)
+	game._input(down_drag)
+	if game.active.position.y != 1:
+		push_error("Downward touch drag should soft-drop one cell immediately")
+		quit(1)
+		return
 	print("PASS: Space starts the game")
 	quit(0)
