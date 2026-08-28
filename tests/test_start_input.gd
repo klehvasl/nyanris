@@ -76,5 +76,28 @@ func run_test() -> void:
 		push_error("Retry should immediately reset the current run at the selected starting level")
 		quit(1)
 		return
+	# Android can synthesize a mouse click immediately after a touch. A single
+	# tap must still rotate exactly once.
+	game.active = Tetromino.new("T")
+	var rotation_before: int = game.active.rotation
+	var touch_press := InputEventScreenTouch.new()
+	touch_press.index = 0
+	touch_press.position = Vector2(180, 300)
+	touch_press.pressed = true
+	game._input(touch_press)
+	var touch_release := InputEventScreenTouch.new()
+	touch_release.index = 0
+	touch_release.position = Vector2(180, 300)
+	touch_release.pressed = false
+	game._input(touch_release)
+	var emulated_mouse := InputEventMouseButton.new()
+	emulated_mouse.position = Vector2(180, 300)
+	emulated_mouse.button_index = MOUSE_BUTTON_LEFT
+	emulated_mouse.pressed = true
+	game._input(emulated_mouse)
+	if game.active.rotation != rotation_before + 1:
+		push_error("A touch followed by its emulated mouse click should rotate only once")
+		quit(1)
+		return
 	print("PASS: Space starts the game")
 	quit(0)

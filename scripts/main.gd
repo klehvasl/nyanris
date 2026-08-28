@@ -10,6 +10,7 @@ const START_BUTTON_RECT := Rect2(90, 538, 180, 42)
 const LEVEL_GRID_ORIGIN := Vector2(58, 434)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
+const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
 
 var board := GameBoard.new()
 var active: Tetromino
@@ -31,6 +32,8 @@ var repeat_timer := 0.0
 var touch_start := Vector2.ZERO
 var touch_last := Vector2.ZERO
 var touch_active := false
+var touch_index := -1
+var last_touch_event_msec := -1000000
 var cat_happy_timer := 0.0
 var cat_frame_timer := 0.0
 var cat_frame := 0
@@ -308,6 +311,10 @@ func update_menu_controls() -> void:
 		start_button.text = "RETRY"
 
 func _input(event: InputEvent) -> void:
+	# Remember touch activity before routing by game state. Godot may emit a
+	# synthetic mouse click immediately afterward, including across menus.
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		last_touch_event_msec = Time.get_ticks_msec()
 	if event.is_action_pressed("toggle_music"):
 		toggle_music()
 		return
@@ -347,8 +354,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		handle_touch(event)
 	elif event is InputEventScreenDrag:
-		touch_last = event.position
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		handle_touch_drag(event)
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and should_handle_pointer_mouse():
 		handle_mouse_click(event.position)
 
 func is_start_input(event: InputEvent) -> bool:
@@ -372,7 +379,7 @@ func is_title_start_input(event: InputEvent) -> bool:
 	if is_start_input(event):
 		return true
 	if event is InputEventMouseButton:
-		return event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+		return event.pressed and event.button_index == MOUSE_BUTTON_LEFT and should_handle_pointer_mouse()
 	if event is InputEventScreenTouch:
 		return event.pressed
 	return false
@@ -396,7 +403,7 @@ func handle_menu_input(event: InputEvent) -> bool:
 			set_start_level(key - KEY_0)
 			return true
 	var pointer_position := Vector2(-1, -1)
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and should_handle_pointer_mouse():
 		pointer_position = event.position
 	elif event is InputEventScreenTouch and event.pressed:
 		pointer_position = event.position
@@ -446,14 +453,22 @@ func handle_mouse_click(position: Vector2) -> void:
 		try_rotate()
 
 func handle_touch(event: InputEventScreenTouch) -> void:
+	last_touch_event_msec = Time.get_ticks_msec()
 	if event.pressed:
+		# Only one finger owns a gameplay gesture. Extra contacts must not move or
+		# release the active piece gesture.
+		if touch_active:
+			return
 		touch_active = true
+		touch_index = event.index
 		touch_start = event.position
 		touch_last = event.position
 		return
-	if not touch_active:
+	if not touch_active or event.index != touch_index:
 		return
+	touch_last = event.position
 	touch_active = false
+	touch_index = -1
 	var delta := touch_last - touch_start
 	if touch_start.y >= 572.0:
 		if touch_start.x < 90.0: try_move(Vector2i.LEFT)
@@ -471,6 +486,18 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		hard_drop()
 	else:
 		try_rotate()
+
+func handle_touch_drag(event: InputEventScreenDrag) -> void:
+	last_touch_event_msec = Time.get_ticks_msec()
+	if touch_active and event.index == touch_index:
+		touch_last = event.position
+
+func should_handle_pointer_mouse() -> bool:
+	# Android/iOS commonly synthesize a mouse click from every screen touch.
+	# Handling that click as well as InputEventScreenTouch doubles every action.
+	if OS.has_feature("mobile"):
+		return false
+	return Time.get_ticks_msec() - last_touch_event_msec > MOUSE_AFTER_TOUCH_SUPPRESS_MS
 
 func process_keyboard_repeat(delta: float) -> void:
 	var direction := int(Input.is_action_pressed("move_right")) - int(Input.is_action_pressed("move_left"))
