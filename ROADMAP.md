@@ -11,6 +11,10 @@
   - Normal landing: briefly and subtly flash the cells of the piece when it locks.
   - Hard-drop landing: use a brighter piece flash alongside the pixel-comet and impact effects.
   - Give normal downward movement/landing and hard drop clearly different sounds; keep the normal cue restrained and the hard-drop cue punchier.
+- [ ] Expand and finalize the gameplay music rotation.
+  - Evaluate the supplied **Kantele Drop Loop** as an additional gameplay track.
+  - Add a few complementary cozy arrangements so longer sessions do not rely on one loop.
+  - Normalize track loudness, choose loop points, and verify redistribution rights before release.
 - [ ] Produce signed Android and iOS exports (requires Android signing setup and macOS/Xcode for iOS).
 
 ## V2 — post-release
