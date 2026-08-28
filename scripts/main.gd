@@ -840,45 +840,55 @@ func draw_hard_drop_fx() -> void:
 	draw_hard_drop_pixel_shock(age)
 
 func draw_hard_drop_comet(alpha: float) -> void:
-	var cell_size := float(GameConfig.CELL_SIZE)
 	var min_x := 99
 	var max_x := -99
-	var start_top_row := 99
 	var landed_top_row := 99
 	for cell: Vector2i in hard_drop_landed_cells:
 		min_x = mini(min_x, cell.x)
 		max_x = maxi(max_x, cell.x)
 		landed_top_row = mini(landed_top_row, cell.y)
-	for cell: Vector2i in hard_drop_start_cells:
-		start_top_row = mini(start_top_row, cell.y)
 	var footprint_left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE)
 	var footprint_width := float((max_x - min_x + 1) * GameConfig.CELL_SIZE)
 	var center_x := footprint_left + footprint_width * 0.5
-	var trail_top := maxf(float(GameConfig.BOARD_ORIGIN.y), float(GameConfig.BOARD_ORIGIN.y + start_top_row * GameConfig.CELL_SIZE))
-	var trail_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.55)
-	var trail_length := maxf(cell_size, trail_bottom - trail_top)
+	# Always begin at the visible board ceiling. A stack near the top therefore
+	# still receives a bright beam instead of reducing the effect to a few motes.
+	var beam_top := float(GameConfig.BOARD_ORIGIN.y)
+	var beam_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.72)
+	var beam_height := maxf(float(GameConfig.CELL_SIZE), beam_bottom - beam_top)
 	var piece_color: Color = GameConfig.COLORS[hard_drop_kind]
-	var band_count := maxi(4, floori(trail_length / 5.0))
-	for band in band_count:
-		var from_head := float(band) / maxf(1.0, float(band_count - 1))
-		var y := trail_bottom - from_head * trail_length
-		var band_width := lerpf(footprint_width, maxf(7.0, footprint_width * 0.22), from_head)
-		var pixel_count := maxi(1, floori(band_width / 7.0))
-		var band_alpha := alpha * lerpf(0.92, 0.14, from_head)
-		for pixel_index in pixel_count:
-			# Deterministic offsets retain a crisp pixel-art texture instead of a
-			# smooth translucent column.
-			var normalized_x := (float(pixel_index) + 0.5) / float(pixel_count) - 0.5
-			var jitter := float(((band * 7 + pixel_index * 11) % 5) - 2)
-			var pixel_pos := Vector2(round(center_x + normalized_x * band_width + jitter), round(y))
-			var pixel_size := 4.0 if (band + pixel_index) % 7 == 0 else (3.0 if band % 3 == 0 else 2.0)
-			var color := Color(1.0, 0.97, 0.78, band_alpha) if band < 3 or (band + pixel_index) % 5 == 0 else piece_color.lightened(lerpf(0.62, 0.20, from_head))
-			color.a = band_alpha
-			draw_rect(Rect2(pixel_pos - Vector2(pixel_size * 0.5, pixel_size * 0.5), Vector2(pixel_size, pixel_size)), color)
-		if band % 5 == 1:
-			var star_side := -1.0 if band % 10 < 5 else 1.0
-			var star_pos := Vector2(round(center_x + star_side * band_width * 0.42), round(y))
-			draw_pixel_star(star_pos, 3.0 if band < 7 else 2.0, Color(1.0, 0.93, 0.64, band_alpha))
+	var row_count := maxi(6, ceili(beam_height / 5.0))
+	var column_count := maxi(4, ceili(footprint_width / 5.0))
+	for row in row_count:
+		var vertical_ratio := float(row) / maxf(1.0, float(row_count - 1))
+		var y := beam_top + vertical_ratio * beam_height
+		var vertical_strength := lerpf(0.42, 1.0, vertical_ratio)
+		for column in column_count:
+			var x_ratio := (float(column) + 0.5) / float(column_count)
+			var core_strength := 1.0 - absf(x_ratio - 0.5) * 2.0
+			var pattern := (row * 37 + column * 61 + row * column * 3) % 100
+			var density := 58.0 + core_strength * 38.0
+			if pattern > density:
+				continue
+			var jitter_x := float(((row * 5 + column * 3) % 3) - 1)
+			var jitter_y := float(((row * 2 + column * 7) % 3) - 1)
+			var pixel_position := Vector2(
+				round(footprint_left + x_ratio * footprint_width + jitter_x),
+				round(y + jitter_y)
+			)
+			var pixel_alpha := alpha * vertical_strength * lerpf(0.62, 1.0, core_strength)
+			var color: Color
+			if core_strength > 0.68 and pattern % 4 != 0:
+				color = Color(1.0, 0.99, 0.90, pixel_alpha)
+			elif core_strength > 0.34:
+				color = Color(1.0, 0.88, 0.48, pixel_alpha)
+			else:
+				color = piece_color.lightened(0.42)
+				color.a = pixel_alpha * 0.88
+			var pixel_size := 4.0 if core_strength > 0.72 and pattern % 5 == 0 else 3.0
+			draw_rect(Rect2(pixel_position - Vector2(pixel_size * 0.5, pixel_size * 0.5), Vector2(pixel_size, pixel_size)), color)
+		if row % 8 == 2:
+			var star_offset := footprint_width * (0.28 if row % 16 == 2 else -0.28)
+			draw_pixel_star(Vector2(round(center_x + star_offset), round(y)), 3.0, Color(1.0, 0.96, 0.72, alpha * vertical_strength))
 
 func draw_pixel_star(position: Vector2, radius: float, color: Color) -> void:
 	draw_rect(Rect2(position - Vector2.ONE, Vector2(3, 3)), color)
