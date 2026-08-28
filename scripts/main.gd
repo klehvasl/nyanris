@@ -65,7 +65,7 @@ func _ready() -> void:
 	add_child(audio)
 	high_score = SaveSystem.load_high_score()
 	background = load("res://assets/backgrounds/cat_room.png")
-	title_background = load("res://assets/source/nyanris title.png")
+	title_background = load("res://assets/source/titlev2.png")
 	level_select_background = load("res://assets/source/room_background.png")
 	board_frame = load("res://assets/source/framev2.png")
 	panel_textures = {
@@ -298,12 +298,9 @@ func update_menu_controls() -> void:
 		button.visible = on_level_select
 	line_clear_slider.visible = debug_tuning_visible and state in [State.LEVEL_SELECT, State.GAME_OVER]
 	line_clear_label.visible = line_clear_slider.visible
-	start_button.visible = on_title or on_level_select or on_game_over
-	music_button.visible = state != State.CLEARING
-	if on_title:
-		start_button.position = Vector2(90, 534)
-		start_button.text = "PRESS START"
-	elif on_level_select:
+	start_button.visible = on_level_select or on_game_over
+	music_button.visible = state not in [State.TITLE, State.CLEARING]
+	if on_level_select:
 		start_button.position = START_BUTTON_RECT.position
 		start_button.text = "START GAME"
 	elif on_game_over:
@@ -325,7 +322,7 @@ func _input(event: InputEvent) -> void:
 		audio.set_gameplay_paused(state == State.PAUSED)
 		return
 	if state == State.TITLE:
-		if is_start_input(event):
+		if is_title_start_input(event):
 			open_level_select()
 			get_viewport().set_input_as_handled()
 		return
@@ -361,6 +358,15 @@ func is_start_input(event: InputEvent) -> bool:
 		return event.pressed
 	# Pointer input is handled by the real Start/Restart button so the level
 	# selector can receive clicks and touches without starting the game first.
+	return false
+
+func is_title_start_input(event: InputEvent) -> bool:
+	if is_start_input(event):
+		return true
+	if event is InputEventMouseButton:
+		return event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+	if event is InputEventScreenTouch:
+		return event.pressed
 	return false
 
 func handle_menu_input(event: InputEvent) -> bool:
@@ -694,30 +700,10 @@ func _draw() -> void:
 		draw_game_over_overlay()
 
 func draw_title_screen() -> void:
-	var navy := Color("07162d")
-	var navy_light := Color("102b55")
-	var gold := Color("d0a967")
-	draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), navy)
-	# Ornamental portrait banners frame the original landscape title artwork.
-	draw_rect(Rect2(0, 0, 360, 126), navy_light)
-	draw_rect(Rect2(0, 416, 360, 224), navy_light)
-	for y in [18.0, 108.0, 430.0, 620.0]:
-		draw_line(Vector2(18, y), Vector2(342, y), gold, 2.0)
-		draw_line(Vector2(28, y + 5), Vector2(332, y + 5), Color(gold, 0.55), 1.0)
-	for x in [28.0, 332.0]:
-		draw_rect(Rect2(x - 4, 58, 8, 8), gold, false, 2.0)
-		draw_rect(Rect2(x - 4, 478, 8, 8), gold, false, 2.0)
-	draw_line(Vector2(122, 72), Vector2(238, 72), gold, 1.0)
-	draw_rect(Rect2(176, 68, 8, 8), gold, false, 2.0)
 	if title_background:
-		# Crop away the artwork's baked 1P/2P controls; this game has one
-		# explicit Start action followed by its own level-select screen.
-		var source_size := title_background.get_size()
-		var source_rect := Rect2(0, 0, source_size.x, source_size.y * 0.86)
-		draw_texture_rect_region(title_background, Rect2(0, 126, 360, 234), source_rect)
-	draw_rect(Rect2(8, 126, 344, 234), gold, false, 2.0)
-	draw_string(ThemeDB.fallback_font, Vector2(48, 470), "STACK THE NIGHT AWAY", HORIZONTAL_ALIGNMENT_CENTER, 264, 13, Color("ead8ad"))
-	draw_string(ThemeDB.fallback_font, Vector2(48, 607), "M  MUSIC", HORIZONTAL_ALIGNMENT_CENTER, 264, 10, Color("bfa475"))
+		draw_texture_rect(title_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("07162d"))
 
 func draw_level_select_screen() -> void:
 	if level_select_background:
