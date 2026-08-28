@@ -48,6 +48,8 @@ var touch_down_transition := 0.0
 var touch_transition_start_msec := 0
 var touch_vertical_start_y := 0.0
 var touch_vertical_start_msec := 0
+var touch_horizontal_direction := 0
+var touch_horizontal_reversed := false
 var cat_happy_timer := 0.0
 var cat_frame_timer := 0.0
 var cat_frame := 0
@@ -475,6 +477,8 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		touch_transition_start_msec = touch_press_msec
 		touch_vertical_start_y = event.position.y
 		touch_vertical_start_msec = touch_press_msec
+		touch_horizontal_direction = 0
+		touch_horizontal_reversed = false
 		touch_gesture = TouchGesture.CONTROLS if music_button and music_button.get_global_rect().has_point(event.position) else TouchGesture.PENDING
 		return
 	if not touch_active or event.index != touch_index:
@@ -541,12 +545,17 @@ func process_touch_motion(position: Vector2) -> void:
 	if touch_gesture == TouchGesture.HORIZONTAL:
 		while absf(touch_drag_remainder.x) >= TOUCH_HORIZONTAL_STEP_PIXELS:
 			var direction := 1 if touch_drag_remainder.x > 0.0 else -1
+			if touch_horizontal_direction != 0 and direction != touch_horizontal_direction:
+				touch_horizontal_reversed = true
+			touch_horizontal_direction = direction
 			try_move(Vector2i(direction, 0))
 			touch_drag_remainder.x -= direction * TOUCH_HORIZONTAL_STEP_PIXELS
 	elif touch_gesture == TouchGesture.VERTICAL:
 		var vertical_distance := position.y - touch_vertical_start_y
 		var vertical_duration := now_msec - touch_vertical_start_msec
-		if vertical_distance >= TOUCH_SWIPE_DROP_MIN_PIXELS and vertical_duration <= TOUCH_SWIPE_DROP_MAX_MS:
+		if not touch_horizontal_reversed \
+				and vertical_distance >= TOUCH_SWIPE_DROP_MIN_PIXELS \
+				and vertical_duration <= TOUCH_SWIPE_DROP_MAX_MS:
 			touch_gesture = TouchGesture.HARD_DROP
 			hard_drop()
 			return

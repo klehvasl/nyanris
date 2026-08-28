@@ -228,5 +228,63 @@ func run_test() -> void:
 		push_error("Horizontal movement followed by a decisive down swipe should hard-drop without lifting")
 		quit(1)
 		return
+	var combined_release := InputEventScreenTouch.new()
+	combined_release.index = 0
+	combined_release.position = combined_swipe_down.position
+	combined_release.pressed = false
+	game._input(combined_release)
+	# Reversing horizontal direction makes the rest of that contact ineligible
+	# for hard drop, while retaining unrestricted side movement and soft drop.
+	game.active = Tetromino.new("T")
+	var reversal_piece = game.active
+	var reversal_press := InputEventScreenTouch.new()
+	reversal_press.index = 0
+	reversal_press.position = Vector2(150, 280)
+	reversal_press.pressed = true
+	game._input(reversal_press)
+	var reversal_right := InputEventScreenDrag.new()
+	reversal_right.index = 0
+	reversal_right.position = Vector2(150 + GameConfig.CELL_SIZE, 280)
+	game._input(reversal_right)
+	var reversal_left := InputEventScreenDrag.new()
+	reversal_left.index = 0
+	reversal_left.position = Vector2(150 - GameConfig.CELL_SIZE, 280)
+	game._input(reversal_left)
+	if not game.touch_horizontal_reversed:
+		push_error("Changing horizontal direction should disable hard drop for that touch")
+		quit(1)
+		return
+	var reversal_turn_down := InputEventScreenDrag.new()
+	reversal_turn_down.index = 0
+	reversal_turn_down.position = Vector2(150 - GameConfig.CELL_SIZE, 300)
+	game._input(reversal_turn_down)
+	var reversal_fast_down := InputEventScreenDrag.new()
+	reversal_fast_down.index = 0
+	reversal_fast_down.position = Vector2(150 - GameConfig.CELL_SIZE, 330)
+	game._input(reversal_fast_down)
+	if game.active != reversal_piece or game.active.position.y <= 0:
+		push_error("Down swipe after a horizontal reversal should soft-drop rather than hard-drop")
+		quit(1)
+		return
+	var reversal_release := InputEventScreenTouch.new()
+	reversal_release.index = 0
+	reversal_release.position = reversal_fast_down.position
+	reversal_release.pressed = false
+	game._input(reversal_release)
+	var reset_piece = game.active
+	var reset_press := InputEventScreenTouch.new()
+	reset_press.index = 0
+	reset_press.position = Vector2(180, 250)
+	reset_press.pressed = true
+	game._input(reset_press)
+	var reset_swipe := InputEventScreenTouch.new()
+	reset_swipe.index = 0
+	reset_swipe.position = Vector2(180, 300)
+	reset_swipe.pressed = false
+	game._input(reset_swipe)
+	if game.active == reset_piece:
+		push_error("Lifting the finger should restore hard-drop eligibility")
+		quit(1)
+		return
 	print("PASS: Space starts the game")
 	quit(0)
