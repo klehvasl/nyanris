@@ -2,8 +2,13 @@
 
 ## V1 — release scope
 
-- Complete and polish the core falling-block game.
-- Finalize gameplay timing, controls, effects, UI, audio, and mobile exports.
+- [x] Complete and polish the core falling-block game.
+- [x] Finalize gameplay timing, keyboard/controller controls, touch controls, retry, and pause.
+- [x] Integrate block, cat, line-clear, title, board-frame, and status-panel art.
+- [x] Add authored looping title/gameplay music with a persistent mute preference.
+- [ ] Fine-tune frame/panel alignment after device playtesting and final asset review.
+- [ ] Add final sound effects and production volume controls.
+- [ ] Produce signed Android and iOS exports (requires Android signing setup and macOS/Xcode for iOS).
 
 ## V2 — post-release
 
@@ -16,4 +21,3 @@
 - At high levels, fill the garden with playful overlapping activity: intentional **cat chaos—or cat bliss**.
 - Keep garden activity visually separate from the board so it never harms gameplay readability.
 - Decide later whether garden population resets per run, persists as progression, or supports both modes.
-

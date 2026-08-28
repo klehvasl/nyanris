@@ -6,9 +6,10 @@ const PANEL := Color("1d1b1a")
 const CREAM := Color("efe2be")
 const WOOD := Color("68462f")
 const WOOD_LIGHT := Color("a7754a")
-const START_BUTTON_RECT := Rect2(88, 292, 184, 38)
-const LEVEL_DOWN_RECT := Rect2(82, 340, 48, 36)
-const LEVEL_UP_RECT := Rect2(230, 340, 48, 36)
+const START_BUTTON_RECT := Rect2(90, 538, 180, 42)
+const LEVEL_GRID_ORIGIN := Vector2(58, 434)
+const LEVEL_BUTTON_SIZE := Vector2(44, 32)
+const LEVEL_BUTTON_GAP := Vector2(6, 6)
 
 var board := GameBoard.new()
 var active: Tetromino
@@ -41,17 +42,21 @@ var hard_drop_kind := ""
 var piece_randomizer := PieceRandomizer.new()
 var audio: AudioSystem
 var background: Texture2D
+var title_background: Texture2D
+var board_frame: Texture2D
+var panel_textures: Dictionary = {}
 var idle_textures: Array[Texture2D] = []
 var happy_textures: Array[Texture2D] = []
 var tile_textures: Dictionary = {}
 var ghost_texture: Texture2D
 var line_clear_frames: Array[Texture2D] = []
 var start_button: Button
-var level_down_button: Button
-var level_up_button: Button
+var level_buttons: Array[Button] = []
 var level_select_label: Label
 var line_clear_slider: HSlider
 var line_clear_label: Label
+var music_button: Button
+var debug_tuning_visible := false
 
 func _ready() -> void:
 	setup_input_map()
@@ -59,6 +64,14 @@ func _ready() -> void:
 	add_child(audio)
 	high_score = SaveSystem.load_high_score()
 	background = load("res://assets/backgrounds/cat_room.png")
+	title_background = load("res://assets/source/title_mockup.png")
+	board_frame = load("res://assets/source/frame.png")
+	panel_textures = {
+		"SCORE": load("res://assets/blocks/score.png"),
+		"LEVEL": load("res://assets/blocks/level.png"),
+		"LINES": load("res://assets/blocks/lines.png"),
+		"NEXT": load("res://assets/blocks/next.png"),
+	}
 	for i in range(1, 5):
 		idle_textures.append(load("res://assets/cat/idle_%02d.png" % i))
 		happy_textures.append(load("res://assets/cat/happy_%02d.png" % i))
@@ -66,6 +79,9 @@ func _ready() -> void:
 	create_start_button()
 	create_level_selector()
 	create_line_clear_tuner()
+	create_music_button()
+	audio.set_music_enabled(bool(SaveSystem.load_setting("music_enabled", true)))
+	audio.play_title_music()
 	set_process(true)
 	queue_redraw()
 
@@ -80,38 +96,61 @@ func load_block_textures() -> void:
 
 func create_start_button() -> void:
 	start_button = Button.new()
-	start_button.position = Vector2(88, 292)
-	start_button.size = Vector2(184, 38)
+	start_button.position = START_BUTTON_RECT.position
+	start_button.size = START_BUTTON_RECT.size
 	start_button.text = "START GAME"
 	start_button.focus_mode = Control.FOCUS_ALL
-	start_button.add_theme_font_size_override("font_size", 16)
+	start_button.add_theme_font_size_override("font_size", 17)
+	style_menu_button(start_button)
 	start_button.pressed.connect(start_game)
 	add_child(start_button)
 	start_button.call_deferred("grab_focus")
 
 func create_level_selector() -> void:
-	level_down_button = Button.new()
-	level_down_button.position = Vector2(82, 340)
-	level_down_button.size = Vector2(48, 36)
-	level_down_button.text = "−"
-	level_down_button.pressed.connect(adjust_start_level.bind(-1))
-	add_child(level_down_button)
-
 	level_select_label = Label.new()
-	level_select_label.position = Vector2(132, 340)
-	level_select_label.size = Vector2(96, 36)
+	level_select_label.position = Vector2(58, 402)
+	level_select_label.size = Vector2(244, 26)
 	level_select_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	level_select_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	level_select_label.add_theme_font_size_override("font_size", 15)
+	level_select_label.add_theme_font_size_override("font_size", 14)
+	level_select_label.add_theme_color_override("font_color", CREAM)
 	add_child(level_select_label)
+	for level_number in range(GameConfig.MAX_LEVEL + 1):
+		var button := Button.new()
+		var column := level_number % 5
+		var row := level_number / 5
+		button.position = LEVEL_GRID_ORIGIN + Vector2(column, row) * (LEVEL_BUTTON_SIZE + LEVEL_BUTTON_GAP)
+		button.size = LEVEL_BUTTON_SIZE
+		button.text = str(level_number)
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_ALL
+		button.add_theme_font_size_override("font_size", 15)
+		style_menu_button(button)
+		button.pressed.connect(set_start_level.bind(level_number))
+		add_child(button)
+		level_buttons.append(button)
+	set_start_level(start_level)
 
-	level_up_button = Button.new()
-	level_up_button.position = Vector2(230, 340)
-	level_up_button.size = Vector2(48, 36)
-	level_up_button.text = "+"
-	level_up_button.pressed.connect(adjust_start_level.bind(1))
-	add_child(level_up_button)
-	set_start_level(0)
+func style_menu_button(button: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("30271f")
+	normal.border_color = Color("b8935d")
+	normal.set_border_width_all(2)
+	normal.corner_radius_top_left = 3
+	normal.corner_radius_top_right = 3
+	normal.corner_radius_bottom_left = 3
+	normal.corner_radius_bottom_right = 3
+	var hover := normal.duplicate()
+	hover.bg_color = Color("55412d")
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color("b07b37")
+	pressed.border_color = Color("f3d48d")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_color_override("font_color", CREAM)
+	button.add_theme_color_override("font_pressed_color", Color("fff0bd"))
 
 func adjust_start_level(amount: int) -> void:
 	set_start_level(start_level + amount)
@@ -119,18 +158,20 @@ func adjust_start_level(amount: int) -> void:
 func set_start_level(value: int) -> void:
 	start_level = clampi(value, 0, GameConfig.MAX_LEVEL)
 	if level_select_label:
-		level_select_label.text = "LEVEL %d" % start_level
+		level_select_label.text = "SELECT STARTING LEVEL  •  %d" % start_level
+	for i in level_buttons.size():
+		level_buttons[i].set_pressed_no_signal(i == start_level)
 
 func create_line_clear_tuner() -> void:
 	line_clear_label = Label.new()
-	line_clear_label.position = Vector2(82, 380)
+	line_clear_label.position = Vector2(82, 584)
 	line_clear_label.size = Vector2(196, 20)
 	line_clear_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	line_clear_label.add_theme_font_size_override("font_size", 12)
 	add_child(line_clear_label)
 
 	line_clear_slider = HSlider.new()
-	line_clear_slider.position = Vector2(82, 400)
+	line_clear_slider.position = Vector2(82, 604)
 	line_clear_slider.size = Vector2(196, 24)
 	line_clear_slider.min_value = 0.08
 	line_clear_slider.max_value = 0.40
@@ -145,6 +186,26 @@ func set_line_clear_seconds(value: float) -> void:
 	if line_clear_label:
 		line_clear_label.text = "LINE CLEAR  %d ms" % roundi(line_clear_seconds * 1000.0)
 
+func create_music_button() -> void:
+	music_button = Button.new()
+	music_button.position = Vector2(264, 8)
+	music_button.size = Vector2(88, 30)
+	music_button.focus_mode = Control.FOCUS_NONE
+	music_button.add_theme_font_size_override("font_size", 11)
+	style_menu_button(music_button)
+	music_button.pressed.connect(toggle_music)
+	add_child(music_button)
+	update_music_button()
+
+func toggle_music() -> void:
+	audio.set_music_enabled(not audio.music_enabled)
+	SaveSystem.save_setting("music_enabled", audio.music_enabled)
+	update_music_button()
+
+func update_music_button() -> void:
+	if music_button:
+		music_button.text = "MUSIC %s" % ("ON" if audio == null or audio.music_enabled else "OFF")
+
 func setup_input_map() -> void:
 	bind_keys("move_left", [KEY_A, KEY_LEFT])
 	bind_keys("move_right", [KEY_D, KEY_RIGHT])
@@ -152,6 +213,9 @@ func setup_input_map() -> void:
 	bind_keys("hard_drop", [KEY_SPACE])
 	bind_keys("rotate", [KEY_X, KEY_UP])
 	bind_keys("pause", [KEY_P, KEY_ESCAPE])
+	bind_keys("retry", [KEY_R])
+	bind_keys("toggle_music", [KEY_M])
+	bind_keys("toggle_tuning", [KEY_F1])
 	bind_joy_button("move_left", JOY_BUTTON_DPAD_LEFT)
 	bind_joy_button("move_right", JOY_BUTTON_DPAD_RIGHT)
 	bind_joy_button("soft_drop", JOY_BUTTON_DPAD_DOWN)
@@ -175,7 +239,7 @@ func bind_joy_button(action: StringName, button: int) -> void:
 	InputMap.action_add_event(action, event)
 
 func _process(delta: float) -> void:
-	update_start_button()
+	update_menu_controls()
 	if hard_drop_fx_timer > 0.0:
 		hard_drop_fx_timer = maxf(0.0, hard_drop_fx_timer - delta)
 	cat_frame_timer += delta
@@ -223,24 +287,36 @@ func _process(delta: float) -> void:
 					break
 	queue_redraw()
 
-func update_start_button() -> void:
-	var should_show := state in [State.TITLE, State.GAME_OVER]
-	level_down_button.visible = should_show
-	level_up_button.visible = should_show
-	level_select_label.visible = should_show
-	line_clear_slider.visible = should_show
-	line_clear_label.visible = should_show
-	if start_button.visible != should_show:
-		start_button.visible = should_show
-		if should_show:
-			start_button.text = "RESTART" if state == State.GAME_OVER else "START GAME"
-			start_button.grab_focus()
-	if should_show and not start_button.has_focus():
-		start_button.grab_focus()
+func update_menu_controls() -> void:
+	var on_title := state == State.TITLE
+	var on_game_over := state == State.GAME_OVER
+	level_select_label.visible = on_title
+	for button in level_buttons:
+		button.visible = on_title
+	line_clear_slider.visible = debug_tuning_visible and state in [State.TITLE, State.GAME_OVER]
+	line_clear_label.visible = line_clear_slider.visible
+	start_button.visible = on_title or on_game_over
+	music_button.visible = state != State.CLEARING
+	if on_title:
+		start_button.position = START_BUTTON_RECT.position
+		start_button.text = "START GAME"
+	elif on_game_over:
+		start_button.position = Vector2(90, 392)
+		start_button.text = "RETRY"
 
 func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_music"):
+		toggle_music()
+		return
+	if event.is_action_pressed("toggle_tuning") and state in [State.TITLE, State.GAME_OVER]:
+		debug_tuning_visible = not debug_tuning_visible
+		return
+	if event.is_action_pressed("retry") and state in [State.PLAYING, State.CLEARING, State.PAUSED, State.GAME_OVER]:
+		retry_game()
+		return
 	if event.is_action_pressed("pause") and state in [State.PLAYING, State.PAUSED]:
 		state = State.PLAYING if state == State.PAUSED else State.PAUSED
+		audio.set_gameplay_paused(state == State.PAUSED)
 		return
 	if state in [State.TITLE, State.GAME_OVER]:
 		if handle_menu_input(event):
@@ -295,16 +371,21 @@ func handle_menu_input(event: InputEvent) -> bool:
 		pointer_position = event.position
 	if pointer_position.x < 0.0:
 		return false
-	if LEVEL_DOWN_RECT.has_point(pointer_position):
-		adjust_start_level(-1)
-		return true
-	if LEVEL_UP_RECT.has_point(pointer_position):
-		adjust_start_level(1)
-		return true
-	if START_BUTTON_RECT.has_point(pointer_position):
+	if state == State.TITLE:
+		for i in level_buttons.size():
+			if level_button_rect(i).has_point(pointer_position):
+				set_start_level(i)
+				return true
+	var active_start_rect := Rect2(start_button.position, start_button.size)
+	if active_start_rect.has_point(pointer_position):
 		start_game()
 		return true
 	return false
+
+func level_button_rect(level_number: int) -> Rect2:
+	var column := level_number % 5
+	var row := level_number / 5
+	return Rect2(LEVEL_GRID_ORIGIN + Vector2(column, row) * (LEVEL_BUTTON_SIZE + LEVEL_BUTTON_GAP), LEVEL_BUTTON_SIZE)
 
 func handle_mouse_click(position: Vector2) -> void:
 	if position.y >= 572.0:
@@ -369,10 +450,23 @@ func start_game() -> void:
 	score = 0
 	lines = 0
 	level = start_level
+	gravity_accumulator = 0.0
+	soft_drop_accumulator = 0.0
+	lock_timer = 0.0
+	clear_timer = 0.0
+	clearing_rows.clear()
+	hard_drop_fx_timer = 0.0
 	piece_randomizer.reset()
 	next_kind = piece_randomizer.next_piece()
 	state = State.PLAYING
+	audio.play_game_music()
 	spawn_piece()
+
+func retry_game() -> void:
+	# A dedicated entry point keeps retry behavior consistent across game-over,
+	# pause, keyboard/controller shortcuts, and future touch UI.
+	state = State.GAME_OVER
+	start_game()
 
 func spawn_piece() -> void:
 	active = Tetromino.new(next_kind)
@@ -382,6 +476,7 @@ func spawn_piece() -> void:
 	lock_timer = 0.0
 	if not board.fits(active, active.position, active.rotation):
 		state = State.GAME_OVER
+		audio.stop_music()
 		audio.play_game_over()
 		if score > high_score:
 			high_score = score
@@ -495,18 +590,30 @@ func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false) 
 	draw_line(pos + Vector2(14,2), pos + Vector2(14,14), Color(0,0,0,0.30 * alpha), 1.0)
 
 func draw_panel(rect: Rect2, title: String, value: String) -> void:
-	draw_rect(rect, WOOD)
-	draw_rect(rect.grow(-3), CREAM)
-	draw_rect(Rect2(rect.position + Vector2(6,20), rect.size - Vector2(12,26)), PANEL)
-	draw_string(ThemeDB.fallback_font, rect.position + Vector2(8,15), title, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 16, 11, Color("463426"))
-	draw_string(ThemeDB.fallback_font, rect.position + Vector2(8,42), value, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 16, 18, CREAM)
+	var texture: Texture2D = panel_textures.get(title)
+	if texture:
+		draw_texture_rect(texture, rect, false)
+	else:
+		draw_rect(rect, WOOD)
+		draw_rect(rect.grow(-3), CREAM)
+		draw_rect(Rect2(rect.position + Vector2(6,20), rect.size - Vector2(12,26)), PANEL)
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(8,15), title, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 16, 11, Color("463426"))
+	if value != "":
+		var value_y := rect.position.y + rect.size.y * 0.77
+		draw_string(ThemeDB.fallback_font, Vector2(rect.position.x + 8, value_y), value, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 16, 17, CREAM)
 
 func _draw() -> void:
+	if state == State.TITLE:
+		draw_title_screen()
+		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
-	draw_rect(Rect2(15, 106, 330, 448), Color(0.07,0.055,0.045,0.88))
-	draw_rect(Rect2(21, 135, 174, 334), WOOD_LIGHT)
-	draw_rect(Rect2(25, 139, 166, 326), Color("151719"))
+	draw_rect(Rect2(10, 96, 340, 468), Color(0.07,0.055,0.045,0.70))
+	if board_frame:
+		# Temporary first-pass fit: the source opening is mapped over the exact
+		# 160x320 logical board. It can be replaced without touching gameplay.
+		draw_texture_rect(board_frame, Rect2(-15, 46, 293, 476), false)
+	draw_rect(Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE), Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
 		draw_line(Vector2(28,142 + y*16), Vector2(188,142 + y*16), Color(0.32,0.30,0.27,0.35))
 	for x in GameConfig.BOARD_SIZE.x + 1:
@@ -525,27 +632,43 @@ func _draw() -> void:
 				draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
 			if cell.y >= 0: draw_tile(cell, active.kind)
-	draw_panel(Rect2(205, 142, 132, 64), "SCORE", "%06d" % score)
-	draw_panel(Rect2(205, 214, 132, 64), "LEVEL", "%02d" % level)
-	draw_panel(Rect2(205, 286, 132, 64), "LINES", "%03d" % lines)
-	draw_panel(Rect2(205, 358, 132, 94), "NEXT", "")
+	draw_panel(Rect2(205, 136, 132, 116), "NEXT", "")
+	draw_panel(Rect2(205, 258, 132, 62), "SCORE", "%06d" % score)
+	draw_panel(Rect2(205, 326, 132, 62), "LEVEL", "%02d" % level)
+	draw_panel(Rect2(205, 394, 132, 62), "LINES", "%03d" % lines)
 	if next_kind != "":
 		var preview := Tetromino.new(next_kind)
 		for cell: Vector2i in preview.cells(Vector2i.ZERO, 0):
-			var p := Vector2(232 + cell.x*16, 389 + cell.y*16)
+			var p := Vector2(238 + cell.x*16, 190 + cell.y*16)
 			draw_tile_at(p, next_kind)
 	var cat_texture: Texture2D = happy_textures[cat_frame] if cat_happy_timer > 0.0 else idle_textures[cat_frame]
 	if cat_texture:
-		draw_texture_rect(cat_texture, Rect2(221, 448, 100, 120), false)
-	draw_string(ThemeDB.fallback_font, Vector2(18, 42), "COZY CAT BLOCKS", HORIZONTAL_ALIGNMENT_CENTER, 324, 26, CREAM)
-	draw_string(ThemeDB.fallback_font, Vector2(18, 68), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 324, 12, Color("c8ad7f"))
-	draw_touch_controls()
-	if state == State.TITLE:
-		draw_overlay("COZY CAT BLOCKS", "")
-	elif state == State.PAUSED:
-		draw_overlay("PAUSED", "PRESS P TO CONTINUE")
+		draw_texture_rect(cat_texture, Rect2(235, 454, 84, 101), false)
+	draw_string(ThemeDB.fallback_font, Vector2(12, 38), "COZY CAT BLOCKS", HORIZONTAL_ALIGNMENT_CENTER, 235, 18, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(12, 61), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 235, 11, Color("c8ad7f"))
+	if state in [State.PLAYING, State.PAUSED]:
+		draw_touch_controls()
+	if state == State.PAUSED:
+		draw_overlay("PAUSED", "P: RESUME   •   R: RETRY")
 	elif state == State.GAME_OVER:
-		draw_overlay("GAME OVER", "")
+		draw_game_over_overlay()
+
+func draw_title_screen() -> void:
+	if title_background:
+		draw_texture_rect(title_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("e8dfc8"))
+	draw_rect(Rect2(42, 390, 276, 198), Color(0.055, 0.05, 0.04, 0.88))
+	draw_rect(Rect2(42, 390, 276, 198), Color("b8935d"), false, 2.0)
+
+func draw_game_over_overlay() -> void:
+	var rect := Rect2(46, 220, 268, 232)
+	draw_rect(rect, Color(0.06,0.05,0.04,0.96))
+	draw_rect(rect, WOOD_LIGHT, false, 3.0)
+	draw_string(ThemeDB.fallback_font, Vector2(58, 270), "GAME OVER", HORIZONTAL_ALIGNMENT_CENTER, 244, 28, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(58, 310), "SCORE  %06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 244, 15, Color("e2c98f"))
+	draw_string(ThemeDB.fallback_font, Vector2(58, 338), "LINES  %03d     LEVEL  %02d" % [lines, level], HORIZONTAL_ALIGNMENT_CENTER, 244, 12, Color("c8ad7f"))
+	draw_string(ThemeDB.fallback_font, Vector2(58, 372), "R OR ANY KEY TO RETRY", HORIZONTAL_ALIGNMENT_CENTER, 244, 10, Color("a99169"))
 
 func draw_hard_drop_fx() -> void:
 	var age := GameConfig.HARD_DROP_IMPACT_SECONDS - hard_drop_fx_timer

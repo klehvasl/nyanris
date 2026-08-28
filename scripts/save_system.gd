@@ -11,6 +11,18 @@ static func load_high_score() -> int:
 
 static func save_high_score(value: int) -> void:
 	var config := ConfigFile.new()
+	config.load(PATH)
 	config.set_value("scores", "high_score", value)
 	config.save(PATH)
 
+static func load_setting(key: String, default_value: Variant) -> Variant:
+	var config := ConfigFile.new()
+	if config.load(PATH) == OK:
+		return config.get_value("settings", key, default_value)
+	return default_value
+
+static func save_setting(key: String, value: Variant) -> void:
+	var config := ConfigFile.new()
+	config.load(PATH)
+	config.set_value("settings", key, value)
+	config.save(PATH)

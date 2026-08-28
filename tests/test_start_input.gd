@@ -12,7 +12,7 @@ func run_test() -> void:
 		push_error("Game should begin on the title screen")
 		quit(1)
 		return
-	var click_position := Vector2(254, 358)
+	var click_position := Vector2(124, 450)
 	var press := InputEventMouseButton.new()
 	press.position = click_position
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -25,7 +25,7 @@ func run_test() -> void:
 	game._input(release)
 	await process_frame
 	if game.start_level != 1:
-		push_error("Clicking the + selector should change the starting level")
+		push_error("Clicking level 1 in the selector should change the starting level")
 		quit(1)
 		return
 	game.set_start_level(5)
@@ -50,6 +50,11 @@ func run_test() -> void:
 	game.hard_drop()
 	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != 4 or game.hard_drop_shock_pixels.size() != 12:
 		push_error("Hard drop should begin the visual trail and impact overlay")
+		quit(1)
+		return
+	game.retry_game()
+	if game.state != game.State.PLAYING or game.score != 0 or game.lines != 0 or game.level != 5:
+		push_error("Retry should immediately reset the current run at the selected starting level")
 		quit(1)
 		return
 	print("PASS: Space starts the game")
