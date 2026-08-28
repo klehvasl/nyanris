@@ -162,6 +162,39 @@ func run_test() -> void:
 		push_error("A quick downward swipe should hard-drop and spawn the next piece")
 		quit(1)
 		return
+	# Upward movement is neutral and must not trap the remainder of a held-finger
+	# gesture. Horizontal movement should work immediately afterward.
+	game.active = Tetromino.new("T")
+	var neutral_up_press := InputEventScreenTouch.new()
+	neutral_up_press.index = 0
+	neutral_up_press.position = Vector2(180, 300)
+	neutral_up_press.pressed = true
+	game._input(neutral_up_press)
+	var neutral_up_drag := InputEventScreenDrag.new()
+	neutral_up_drag.index = 0
+	neutral_up_drag.position = Vector2(180, 270)
+	game._input(neutral_up_drag)
+	if game.active.position != Vector2i(3, 0) or game.active.rotation != 0:
+		push_error("Upward touch movement should have no gameplay action")
+		quit(1)
+		return
+	var after_up_horizontal := InputEventScreenDrag.new()
+	after_up_horizontal.index = 0
+	after_up_horizontal.position = Vector2(180 + GameConfig.CELL_SIZE, 270)
+	game._input(after_up_horizontal)
+	if game.active.position.x != 4:
+		push_error("Upward movement should not block later horizontal movement on the same touch")
+		quit(1)
+		return
+	var neutral_up_release := InputEventScreenTouch.new()
+	neutral_up_release.index = 0
+	neutral_up_release.position = after_up_horizontal.position
+	neutral_up_release.pressed = false
+	game._input(neutral_up_release)
+	if game.active.rotation != 0:
+		push_error("Releasing after neutral-up then horizontal movement should not rotate")
+		quit(1)
+		return
 	# A player must be able to position horizontally and then turn the same
 	# held-finger gesture downward for a decisive hard drop.
 	game.active = Tetromino.new("T")

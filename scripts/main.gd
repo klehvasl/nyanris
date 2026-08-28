@@ -505,10 +505,17 @@ func process_touch_motion(position: Vector2) -> void:
 			touch_gesture = TouchGesture.HORIZONTAL
 			touch_drag_remainder.x = total_delta.x
 		elif absf(total_delta.y) > absf(total_delta.x) * 1.2:
-			touch_gesture = TouchGesture.VERTICAL
-			touch_drag_remainder.y = total_delta.y
-			touch_vertical_start_y = touch_start.y
-			touch_vertical_start_msec = touch_press_msec
+			if total_delta.y < 0.0:
+				# Upward motion has no gameplay action. Rebase instead of locking
+				# the gesture, so the same held finger can still move or drop next.
+				touch_start = position
+				touch_drag_remainder = Vector2.ZERO
+				return
+			else:
+				touch_gesture = TouchGesture.VERTICAL
+				touch_drag_remainder.y = total_delta.y
+				touch_vertical_start_y = touch_start.y
+				touch_vertical_start_msec = touch_press_msec
 		else:
 			return
 	elif touch_gesture == TouchGesture.HORIZONTAL:
@@ -523,6 +530,8 @@ func process_touch_motion(position: Vector2) -> void:
 				touch_vertical_start_y = position.y - touch_down_transition
 				touch_vertical_start_msec = touch_transition_start_msec
 				touch_drag_remainder.y = touch_down_transition
+		elif frame_delta.y < -absf(frame_delta.x) * 1.25:
+			touch_down_transition = 0.0
 		else:
 			touch_down_transition = 0.0
 			touch_drag_remainder.x += frame_delta.x
