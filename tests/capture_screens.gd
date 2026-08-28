@@ -11,6 +11,10 @@ func capture() -> void:
 	await process_frame
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://tests/output"))
 	root.get_texture().get_image().save_png("res://tests/output/title.png")
+	game.open_level_select()
+	await process_frame
+	await process_frame
+	root.get_texture().get_image().save_png("res://tests/output/level_select.png")
 	game.start_game()
 	await process_frame
 	await process_frame

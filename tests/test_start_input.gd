@@ -12,6 +12,15 @@ func run_test() -> void:
 		push_error("Game should begin on the title screen")
 		quit(1)
 		return
+	var title_start := InputEventKey.new()
+	title_start.physical_keycode = KEY_SPACE
+	title_start.pressed = true
+	game._input(title_start)
+	await process_frame
+	if game.state != game.State.LEVEL_SELECT:
+		push_error("The title Start action should open level selection")
+		quit(1)
+		return
 	var click_position := Vector2(124, 450)
 	var press := InputEventMouseButton.new()
 	press.position = click_position

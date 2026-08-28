@@ -20,7 +20,7 @@
 - A temporary title/game-over slider tunes the line-clear duration from 80–400 ms in 10 ms increments. The selected duration drives both gameplay pause and visual progress and remains active for subsequent games in the current session.
 - Scoring: 1/2/3/4 lines = 40/100/300/1200 × (level + 1).
 - Level increases every 10 total lines and currently caps at level 9.
-- A title-screen 0–9 grid chooses the starting level. It supports click/touch, Left/Right or A/D, and direct number keys 0–9, with a clear selected state.
+- The landscape `nyanris title.png` artwork is presented in a portrait ornamental title layout. Pressing Start opens a separate room-background 0–9 level grid. The grid supports click/touch, Left/Right or A/D, and direct number keys 0–9, with a clear selected state.
 - Gravity matches the original Game Boy normal level 0–9 table at 60 Hz: 53, 49, 45, 41, 37, 33, 28, 22, 17, and 11 frames per row. This ranges from about 0.88 seconds per row at level 0 to 0.18 seconds at level 9.
 - The original Game Boy A-Type continued beyond level 9 and reached its maximum speed at level 20. Those extreme post-9 speeds are intentionally not enabled in this nine-level MVP.
 - Horizontal repeat: 160 ms delayed auto-shift, then 55 ms repeat.

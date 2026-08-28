@@ -1,6 +1,6 @@
 extends Control
 
-enum State { TITLE, PLAYING, CLEARING, PAUSED, GAME_OVER }
+enum State { TITLE, LEVEL_SELECT, PLAYING, CLEARING, PAUSED, GAME_OVER }
 
 const PANEL := Color("1d1b1a")
 const CREAM := Color("efe2be")
@@ -43,6 +43,7 @@ var piece_randomizer := PieceRandomizer.new()
 var audio: AudioSystem
 var background: Texture2D
 var title_background: Texture2D
+var level_select_background: Texture2D
 var board_frame: Texture2D
 var panel_textures: Dictionary = {}
 var idle_textures: Array[Texture2D] = []
@@ -64,7 +65,8 @@ func _ready() -> void:
 	add_child(audio)
 	high_score = SaveSystem.load_high_score()
 	background = load("res://assets/backgrounds/cat_room.png")
-	title_background = load("res://assets/source/title_mockup.png")
+	title_background = load("res://assets/source/nyanris title.png")
+	level_select_background = load("res://assets/source/room_background.png")
 	board_frame = load("res://assets/source/frame.png")
 	panel_textures = {
 		"SCORE": load("res://assets/blocks/score.png"),
@@ -102,7 +104,7 @@ func create_start_button() -> void:
 	start_button.focus_mode = Control.FOCUS_ALL
 	start_button.add_theme_font_size_override("font_size", 17)
 	style_menu_button(start_button)
-	start_button.pressed.connect(start_game)
+	start_button.pressed.connect(primary_menu_action)
 	add_child(start_button)
 	start_button.call_deferred("grab_focus")
 
@@ -289,15 +291,19 @@ func _process(delta: float) -> void:
 
 func update_menu_controls() -> void:
 	var on_title := state == State.TITLE
+	var on_level_select := state == State.LEVEL_SELECT
 	var on_game_over := state == State.GAME_OVER
-	level_select_label.visible = on_title
+	level_select_label.visible = on_level_select
 	for button in level_buttons:
-		button.visible = on_title
-	line_clear_slider.visible = debug_tuning_visible and state in [State.TITLE, State.GAME_OVER]
+		button.visible = on_level_select
+	line_clear_slider.visible = debug_tuning_visible and state in [State.LEVEL_SELECT, State.GAME_OVER]
 	line_clear_label.visible = line_clear_slider.visible
-	start_button.visible = on_title or on_game_over
+	start_button.visible = on_title or on_level_select or on_game_over
 	music_button.visible = state != State.CLEARING
 	if on_title:
+		start_button.position = Vector2(90, 534)
+		start_button.text = "PRESS START"
+	elif on_level_select:
 		start_button.position = START_BUTTON_RECT.position
 		start_button.text = "START GAME"
 	elif on_game_over:
@@ -308,7 +314,7 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_music"):
 		toggle_music()
 		return
-	if event.is_action_pressed("toggle_tuning") and state in [State.TITLE, State.GAME_OVER]:
+	if event.is_action_pressed("toggle_tuning") and state in [State.LEVEL_SELECT, State.GAME_OVER]:
 		debug_tuning_visible = not debug_tuning_visible
 		return
 	if event.is_action_pressed("retry") and state in [State.PLAYING, State.CLEARING, State.PAUSED, State.GAME_OVER]:
@@ -318,7 +324,12 @@ func _input(event: InputEvent) -> void:
 		state = State.PLAYING if state == State.PAUSED else State.PAUSED
 		audio.set_gameplay_paused(state == State.PAUSED)
 		return
-	if state in [State.TITLE, State.GAME_OVER]:
+	if state == State.TITLE:
+		if is_start_input(event):
+			open_level_select()
+			get_viewport().set_input_as_handled()
+		return
+	if state in [State.LEVEL_SELECT, State.GAME_OVER]:
 		if handle_menu_input(event):
 			get_viewport().set_input_as_handled()
 			return
@@ -353,7 +364,7 @@ func is_start_input(event: InputEvent) -> bool:
 	return false
 
 func handle_menu_input(event: InputEvent) -> bool:
-	if event is InputEventKey and event.pressed and not event.echo:
+	if state == State.LEVEL_SELECT and event is InputEventKey and event.pressed and not event.echo:
 		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
 		if key in [KEY_LEFT, KEY_A]:
 			adjust_start_level(-1)
@@ -371,7 +382,7 @@ func handle_menu_input(event: InputEvent) -> bool:
 		pointer_position = event.position
 	if pointer_position.x < 0.0:
 		return false
-	if state == State.TITLE:
+	if state == State.LEVEL_SELECT:
 		for i in level_buttons.size():
 			if level_button_rect(i).has_point(pointer_position):
 				set_start_level(i)
@@ -381,6 +392,20 @@ func handle_menu_input(event: InputEvent) -> bool:
 		start_game()
 		return true
 	return false
+
+func primary_menu_action() -> void:
+	if state == State.TITLE:
+		open_level_select()
+	elif state in [State.LEVEL_SELECT, State.GAME_OVER]:
+		start_game()
+
+func open_level_select() -> void:
+	if state != State.TITLE:
+		return
+	state = State.LEVEL_SELECT
+	start_button.release_focus()
+	level_buttons[start_level].call_deferred("grab_focus")
+	queue_redraw()
 
 func level_button_rect(level_number: int) -> Rect2:
 	var column := level_number % 5
@@ -442,7 +467,7 @@ func process_keyboard_repeat(delta: float) -> void:
 			repeat_timer = GameConfig.ARR_SECONDS
 
 func start_game() -> void:
-	if state not in [State.TITLE, State.GAME_OVER]:
+	if state not in [State.LEVEL_SELECT, State.GAME_OVER]:
 		return
 	start_button.hide()
 	start_button.release_focus()
@@ -606,6 +631,9 @@ func _draw() -> void:
 	if state == State.TITLE:
 		draw_title_screen()
 		return
+	if state == State.LEVEL_SELECT:
+		draw_level_select_screen()
+		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
 	draw_rect(Rect2(10, 96, 340, 468), Color(0.07,0.055,0.045,0.70))
@@ -654,12 +682,40 @@ func _draw() -> void:
 		draw_game_over_overlay()
 
 func draw_title_screen() -> void:
+	var navy := Color("07162d")
+	var navy_light := Color("102b55")
+	var gold := Color("d0a967")
+	draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), navy)
+	# Ornamental portrait banners frame the original landscape title artwork.
+	draw_rect(Rect2(0, 0, 360, 126), navy_light)
+	draw_rect(Rect2(0, 416, 360, 224), navy_light)
+	for y in [18.0, 108.0, 430.0, 620.0]:
+		draw_line(Vector2(18, y), Vector2(342, y), gold, 2.0)
+		draw_line(Vector2(28, y + 5), Vector2(332, y + 5), Color(gold, 0.55), 1.0)
+	for x in [28.0, 332.0]:
+		draw_rect(Rect2(x - 4, 58, 8, 8), gold, false, 2.0)
+		draw_rect(Rect2(x - 4, 478, 8, 8), gold, false, 2.0)
+	draw_line(Vector2(122, 72), Vector2(238, 72), gold, 1.0)
+	draw_rect(Rect2(176, 68, 8, 8), gold, false, 2.0)
 	if title_background:
-		draw_texture_rect(title_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false)
+		# Crop away the artwork's baked 1P/2P controls; this game has one
+		# explicit Start action followed by its own level-select screen.
+		var source_size := title_background.get_size()
+		var source_rect := Rect2(0, 0, source_size.x, source_size.y * 0.86)
+		draw_texture_rect_region(title_background, Rect2(0, 126, 360, 234), source_rect)
+	draw_rect(Rect2(8, 126, 344, 234), gold, false, 2.0)
+	draw_string(ThemeDB.fallback_font, Vector2(48, 470), "STACK THE NIGHT AWAY", HORIZONTAL_ALIGNMENT_CENTER, 264, 13, Color("ead8ad"))
+	draw_string(ThemeDB.fallback_font, Vector2(48, 607), "M  MUSIC", HORIZONTAL_ALIGNMENT_CENTER, 264, 10, Color("bfa475"))
+
+func draw_level_select_screen() -> void:
+	if level_select_background:
+		draw_texture_rect(level_select_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.62, 0.62, 0.62, 1.0))
 	else:
-		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("e8dfc8"))
-	draw_rect(Rect2(42, 390, 276, 198), Color(0.055, 0.05, 0.04, 0.88))
-	draw_rect(Rect2(42, 390, 276, 198), Color("b8935d"), false, 2.0)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("241b15"))
+	draw_rect(Rect2(36, 366, 288, 226), Color(0.055, 0.05, 0.04, 0.91))
+	draw_rect(Rect2(36, 366, 288, 226), Color("b8935d"), false, 2.0)
+	draw_string(ThemeDB.fallback_font, Vector2(50, 395), "CHOOSE YOUR PACE", HORIZONTAL_ALIGNMENT_CENTER, 260, 20, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(50, 616), "LEFT / RIGHT OR NUMBER KEYS 0–9", HORIZONTAL_ALIGNMENT_CENTER, 260, 9, Color("d0bd91"))
 
 func draw_game_over_overlay() -> void:
 	var rect := Rect2(46, 220, 268, 232)
