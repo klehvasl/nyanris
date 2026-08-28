@@ -67,7 +67,7 @@ func _ready() -> void:
 	background = load("res://assets/backgrounds/cat_room.png")
 	title_background = load("res://assets/source/nyanris title.png")
 	level_select_background = load("res://assets/source/room_background.png")
-	board_frame = load("res://assets/source/frame.png")
+	board_frame = load("res://assets/source/framev2.png")
 	panel_textures = {
 		"SCORE": load("res://assets/blocks/score.png"),
 		"LEVEL": load("res://assets/blocks/level.png"),
@@ -636,11 +636,11 @@ func _draw() -> void:
 		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
-	draw_rect(Rect2(10, 96, 340, 468), Color(0.07,0.055,0.045,0.70))
+	draw_rect(Rect2(4, 76, 352, 488), Color(0.07,0.055,0.045,0.70))
 	if board_frame:
-		# Temporary first-pass fit: the source opening is mapped over the exact
-		# 160x320 logical board. It can be replaced without touching gameplay.
-		draw_texture_rect(board_frame, Rect2(-15, 46, 293, 476), false)
+		# Frame V2 is maximized vertically. Its source opening (approximately
+		# x166..776, y316..1420) maps directly over the exact 160x320 board.
+		draw_texture_rect(board_frame, Rect2(-8, 80, 249, 481), false)
 	draw_rect(Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE), Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
 		draw_line(Vector2(28,142 + y*16), Vector2(188,142 + y*16), Color(0.32,0.30,0.27,0.35))
@@ -660,18 +660,30 @@ func _draw() -> void:
 				draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
 			if cell.y >= 0: draw_tile(cell, active.kind)
-	draw_panel(Rect2(205, 136, 132, 116), "NEXT", "")
-	draw_panel(Rect2(205, 258, 132, 62), "SCORE", "%06d" % score)
-	draw_panel(Rect2(205, 326, 132, 62), "LEVEL", "%02d" % level)
-	draw_panel(Rect2(205, 394, 132, 62), "LINES", "%03d" % lines)
+	var next_rect := Rect2(240, 145, 112, 110)
+	draw_panel(next_rect, "NEXT", "")
+	draw_panel(Rect2(240, 263, 112, 58), "SCORE", "%06d" % score)
+	draw_panel(Rect2(240, 328, 112, 58), "LEVEL", "%02d" % level)
+	draw_panel(Rect2(240, 393, 112, 58), "LINES", "%03d" % lines)
 	if next_kind != "":
 		var preview := Tetromino.new(next_kind)
-		for cell: Vector2i in preview.cells(Vector2i.ZERO, 0):
-			var p := Vector2(238 + cell.x*16, 190 + cell.y*16)
+		var preview_cells := preview.cells(Vector2i.ZERO, 0)
+		var min_cell := Vector2i(99, 99)
+		var max_cell := Vector2i(-99, -99)
+		for cell: Vector2i in preview_cells:
+			min_cell.x = mini(min_cell.x, cell.x)
+			min_cell.y = mini(min_cell.y, cell.y)
+			max_cell.x = maxi(max_cell.x, cell.x)
+			max_cell.y = maxi(max_cell.y, cell.y)
+		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * 16.0
+		var preview_center := Vector2(next_rect.position.x + next_rect.size.x * 0.5, next_rect.position.y + 73.0)
+		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell * 16)
+		for cell: Vector2i in preview_cells:
+			var p := preview_origin + Vector2(cell * 16)
 			draw_tile_at(p, next_kind)
 	var cat_texture: Texture2D = happy_textures[cat_frame] if cat_happy_timer > 0.0 else idle_textures[cat_frame]
 	if cat_texture:
-		draw_texture_rect(cat_texture, Rect2(235, 454, 84, 101), false)
+		draw_texture_rect(cat_texture, Rect2(252, 454, 84, 101), false)
 	draw_string(ThemeDB.fallback_font, Vector2(12, 38), "COZY CAT BLOCKS", HORIZONTAL_ALIGNMENT_CENTER, 235, 18, CREAM)
 	draw_string(ThemeDB.fallback_font, Vector2(12, 61), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 235, 11, Color("c8ad7f"))
 	if state in [State.PLAYING, State.PAUSED]:
