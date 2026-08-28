@@ -30,9 +30,17 @@ func place(piece: Tetromino) -> void:
 func full_rows() -> Array[int]:
 	var rows: Array[int] = []
 	for y in GameConfig.BOARD_SIZE.y:
-		if not cells[y].has(""):
+		if is_row_full(y):
 			rows.append(y)
 	return rows
+
+func is_row_full(y: int) -> bool:
+	if y < 0 or y >= cells.size():
+		return false
+	for x in GameConfig.BOARD_SIZE.x:
+		if cells[y][x] == "":
+			return false
+	return true
 
 func remove_rows(rows: Array[int]) -> void:
 	rows.sort()

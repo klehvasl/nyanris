@@ -598,7 +598,14 @@ func lock_piece() -> void:
 		clear_timer = line_clear_seconds
 
 func finish_line_clear() -> void:
+	# Revalidate after the visual pause so only genuinely complete rows can be removed.
+	clearing_rows = clearing_rows.filter(func(row: int) -> bool: return board.is_row_full(row))
 	var count := clearing_rows.size()
+	if count == 0:
+		clearing_rows.clear()
+		state = State.PLAYING
+		spawn_piece()
+		return
 	board.remove_rows(clearing_rows)
 	audio.play_clear(count)
 	score += GameConfig.LINE_POINTS[count] * (level + 1)
@@ -661,11 +668,14 @@ func _draw() -> void:
 		# Frame V2 is maximized vertically. Its source opening (approximately
 		# x166..776, y316..1420) maps directly over the exact 160x320 board.
 		draw_texture_rect(board_frame, Rect2(-8, 80, 249, 481), false)
-	draw_rect(Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE), Color("151719"))
+	var board_rect := Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE)
+	draw_rect(board_rect, Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
-		draw_line(Vector2(28,142 + y*16), Vector2(188,142 + y*16), Color(0.32,0.30,0.27,0.35))
+		var grid_y := float(GameConfig.BOARD_ORIGIN.y + y * GameConfig.CELL_SIZE)
+		draw_line(Vector2(board_rect.position.x, grid_y), Vector2(board_rect.end.x, grid_y), Color(0.32,0.30,0.27,0.26))
 	for x in GameConfig.BOARD_SIZE.x + 1:
-		draw_line(Vector2(28 + x*16,142), Vector2(28 + x*16,462), Color(0.32,0.30,0.27,0.35))
+		var grid_x := float(GameConfig.BOARD_ORIGIN.x + x * GameConfig.CELL_SIZE)
+		draw_line(Vector2(grid_x, board_rect.position.y), Vector2(grid_x, board_rect.end.y), Color(0.32,0.30,0.27,0.26))
 	for y in GameConfig.BOARD_SIZE.y:
 		for x in GameConfig.BOARD_SIZE.x:
 			if board.cells[y][x] != "":
@@ -820,8 +830,8 @@ func draw_line_clear_fx() -> void:
 		if not line_clear_frames.is_empty():
 			var frame_index := mini(floori(progress * line_clear_frames.size()), line_clear_frames.size() - 1)
 			# Keep the glow focused around the cleared row instead of covering nearby play.
-			var effect_rect := Rect2(board_center - 104.0, row_y - 24.0, 208, 64)
-			draw_texture_rect(line_clear_frames[frame_index], effect_rect, false)
+			var effect_rect := Rect2(board_center - 96.0, row_y - 8.0, 192, 32)
+			draw_texture_rect(line_clear_frames[frame_index], effect_rect, false, Color(1, 1, 1, 0.90))
 
 func draw_touch_controls() -> void:
 	var labels := ["LEFT", "TURN", "RIGHT", "DROP"]

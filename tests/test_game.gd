@@ -6,6 +6,7 @@ func _initialize() -> void:
 	test_piece_geometry()
 	test_board_collision()
 	test_multi_line_removal()
+	test_incomplete_rows_never_clear()
 	test_gravity_and_scoring()
 	test_seven_bag()
 	if failures == 0:
@@ -45,6 +46,21 @@ func test_multi_line_removal() -> void:
 	check(board.cells.size() == 20, "Board height must remain 20")
 	check(board.cells[0].has(""), "New top row must be empty")
 	check(board.cells[1].has(""), "Second new top row must be empty")
+
+func test_incomplete_rows_never_clear() -> void:
+	for missing_x in GameConfig.BOARD_SIZE.x:
+		var board := GameBoard.new()
+		for x in GameConfig.BOARD_SIZE.x:
+			if x != missing_x:
+				board.cells[19][x] = "T"
+		check(not board.is_row_full(19), "A row missing column %d must remain incomplete" % missing_x)
+		check(board.full_rows().is_empty(), "An incomplete row must never be returned for clearing")
+	var board := GameBoard.new()
+	for x in GameConfig.BOARD_SIZE.x:
+		board.cells[19][x] = "I"
+	board.cells[18][0] = "O"
+	board.remove_rows(board.full_rows())
+	check(board.cells[19][0] == "O", "Blocks above a cleared row must fall without being removed")
 
 func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.gravity_seconds(0), 53.0 / 60.0), "Level 0 gravity should match Game Boy's 53 frames")

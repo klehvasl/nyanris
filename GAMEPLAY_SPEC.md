@@ -16,7 +16,7 @@
 - Ghost piece enabled. Held soft drop advances one row every 75 ms and scores 1 point per cell; it uses an independent timer so gravity backlog cannot cause a sudden drop. Hard drop scores 2 per cell.
 - Hard drop remains logically instantaneous and adds three piece-shaped afterimages plus a 150 ms squash → slight overshoot → settle. The impact uses a brief two-pixel expanding contact line and twelve deterministic 1–2 px fragments; no particle node or texture asset is used.
 - A grounded piece locks after 350 ms. Successful movement or rotation resets the lock timer; hard drop still locks immediately.
-- Line clear defaults to 350 ms and uses a six-stage transparent 2D-HD gold animation extracted from `assets/source/line clear.png`. It is rendered once as a compact 208×64 row-level overlay while a synchronized center-out mask removes the blocks; it is never repeated inside individual cells.
+- Line clear defaults to 350 ms and uses a six-stage transparent 2D-HD gold animation extracted from `assets/source/line clear.png`. It is rendered once as a compact 192×32 row-level overlay while a synchronized center-out mask removes the blocks; it is never repeated inside individual cells. Rows are revalidated as completely occupied before removal.
 - A temporary title/game-over slider tunes the line-clear duration from 80–400 ms in 10 ms increments. The selected duration drives both gameplay pause and visual progress and remains active for subsequent games in the current session.
 - Scoring: 1/2/3/4 lines = 40/100/300/1200 × (level + 1).
 - Level increases every 10 total lines and currently caps at level 9.
