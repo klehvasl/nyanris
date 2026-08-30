@@ -12,8 +12,9 @@ const MENU_BUTTON_SIZE := Vector2(180, 38)
 const LEVEL_GRID_ORIGIN := Vector2(58, 434)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
-const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 500
+const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 1500
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
+const TOUCH_TAP_MAX_PIXELS := 5.0
 const TOUCH_HORIZONTAL_STEP_PIXELS := 25.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_AXIS_CHANGE_PIXELS := 18.0
@@ -75,6 +76,7 @@ var last_touch_event_msec := -1000000
 var touch_press_msec := 0
 var touch_gesture := TouchGesture.PENDING
 var touch_drag_remainder := Vector2.ZERO
+var touch_max_travel := 0.0
 var touch_down_transition := 0.0
 var touch_transition_start_msec := 0
 var touch_vertical_start_y := 0.0
@@ -818,8 +820,9 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		return
 	process_touch_motion(event.position)
 	var completed_gesture := touch_gesture
+	var completed_as_tap := touch_max_travel <= TOUCH_TAP_MAX_PIXELS
 	reset_touch_gesture()
-	if completed_gesture == TouchGesture.PENDING:
+	if completed_gesture == TouchGesture.PENDING and completed_as_tap:
 		try_rotate()
 
 func begin_touch_gesture(index: int, position: Vector2) -> void:
@@ -834,6 +837,7 @@ func rebase_touch_gesture(position: Vector2) -> void:
 	touch_last = position
 	touch_press_msec = now_msec
 	touch_drag_remainder = Vector2.ZERO
+	touch_max_travel = 0.0
 	touch_down_transition = 0.0
 	touch_transition_start_msec = now_msec
 	touch_vertical_start_y = position.y
@@ -847,6 +851,7 @@ func reset_touch_gesture() -> void:
 	touch_index = -1
 	touch_gesture = TouchGesture.PENDING
 	touch_drag_remainder = Vector2.ZERO
+	touch_max_travel = 0.0
 	touch_down_transition = 0.0
 	touch_horizontal_direction = 0
 	touch_horizontal_reversed = false
@@ -873,6 +878,7 @@ func process_touch_motion(position: Vector2) -> void:
 	var now_msec := Time.get_ticks_msec()
 	var frame_delta := position - touch_last
 	touch_last = position
+	touch_max_travel = maxf(touch_max_travel, position.distance_to(touch_start))
 	if touch_gesture in [TouchGesture.CONTROLS, TouchGesture.HARD_DROP]:
 		return
 	var total_delta := position - touch_start

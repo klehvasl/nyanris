@@ -386,6 +386,36 @@ func run_test() -> void:
 		push_error("A touch followed by its emulated mouse click should rotate only once")
 		quit(1)
 		return
+	# Web touch-to-mouse synthesis may be delayed by a busy frame. It must not
+	# rotate a later piece after the old 500 ms suppression window.
+	var rotation_after_touch: int = game.active.rotation
+	game.last_touch_event_msec -= 700
+	game._input(emulated_mouse)
+	if game.active.rotation != rotation_after_touch:
+		push_error("A delayed Web synthetic mouse click must not rotate the next piece")
+		quit(1)
+		return
+	# A small attempted swipe can remain below the axis-lock threshold. It is not
+	# a deliberate stationary tap and must not be reinterpreted as rotation.
+	game.active = Tetromino.new("T")
+	var short_swipe_press := InputEventScreenTouch.new()
+	short_swipe_press.index = 0
+	short_swipe_press.position = Vector2(180, 300)
+	short_swipe_press.pressed = true
+	game._input(short_swipe_press)
+	var short_swipe_drag := InputEventScreenDrag.new()
+	short_swipe_drag.index = 0
+	short_swipe_drag.position = Vector2(188, 300)
+	game._input(short_swipe_drag)
+	var short_swipe_release := InputEventScreenTouch.new()
+	short_swipe_release.index = 0
+	short_swipe_release.position = short_swipe_drag.position
+	short_swipe_release.pressed = false
+	game._input(short_swipe_release)
+	if game.active.rotation != 0:
+		push_error("A short attempted swipe must not rotate the active piece")
+		quit(1)
+		return
 	# Dragging should move during the drag instead of batching movement at release.
 	game.active = Tetromino.new("T")
 	var drag_press := InputEventScreenTouch.new()
