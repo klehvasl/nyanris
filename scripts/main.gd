@@ -1,6 +1,6 @@
 extends Control
 
-enum State { TITLE, LEVEL_SELECT, PLAYING, CLEARING, PAUSED, GAME_OVER }
+enum State { TITLE, LEVEL_SELECT, PLAYING, CLEARING, PAUSED, ENDING, GAME_OVER, NAME_ENTRY, HIGH_SCORES }
 enum TouchGesture { PENDING, HORIZONTAL, VERTICAL, HARD_DROP, CONTROLS }
 
 const PANEL := Color("1d1b1a")
@@ -8,6 +8,7 @@ const CREAM := Color("efe2be")
 const WOOD := Color("68462f")
 const WOOD_LIGHT := Color("a7754a")
 const START_BUTTON_RECT := Rect2(90, 538, 180, 42)
+const MENU_BUTTON_SIZE := Vector2(180, 38)
 const LEVEL_GRID_ORIGIN := Vector2(58, 434)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
@@ -18,6 +19,34 @@ const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_AXIS_CHANGE_PIXELS := 18.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
 const TOUCH_SWIPE_DROP_MAX_MS := 240
+const NORMAL_LOCK_FLASH_SECONDS := 0.24
+const HARD_LOCK_FLASH_SECONDS := 0.40
+const ENDING_SKIP_DELAY := 0.85
+const ENDING_CAT_FRAME_SECONDS := 0.72
+const ENDING_CAT_SEQUENCE := [0, 1, 2, 5, 4, 3, 4, 5, 2, 1]
+const ENDING_NEW_STAR_POSITION := Vector2(94, 212)
+const LANTERN_ENDING_SCORE := 10000
+const LANTERN_RISING_SPAWN_SECONDS := 0.22
+const LANTERN_INITIAL_RISING_COUNT := 4
+const LANTERN_AMBIENT_POSITIONS := [
+	Vector2(153, 151),
+	Vector2(193, 128),
+	Vector2(234, 157),
+	Vector2(278, 140),
+	Vector2(318, 169),
+	Vector2(143, 202),
+	Vector2(181, 229),
+	Vector2(218, 191),
+	Vector2(258, 216),
+	Vector2(300, 238),
+	Vector2(239, 250),
+	Vector2(326, 205),
+]
+const CONTROLS_PANEL_RECT := Rect2(24, 70, 312, 500)
+const CAT_CROWD_JUMP_SECONDS := 0.62
+const CAT_CROWD_SIZE := Vector2(31, 37)
+const CAT_CROWD_MIN := Vector2(312, 116)
+const CAT_CROWD_MAX := Vector2(338, 594)
 
 var board := GameBoard.new()
 var active: Tetromino
@@ -29,6 +58,8 @@ var level := 0
 var start_level := 0
 var line_clear_seconds := GameConfig.LINE_CLEAR_SECONDS
 var high_score := 0
+var high_scores: Array[Dictionary] = []
+var high_scores_return_state := State.TITLE
 var gravity_accumulator := 0.0
 var soft_drop_accumulator := 0.0
 var lock_timer := 0.0
@@ -53,11 +84,29 @@ var touch_horizontal_reversed := false
 var cat_happy_timer := 0.0
 var cat_frame_timer := 0.0
 var cat_frame := 0
+var cat_crowd_jump_timer := 0.0
+var cat_crowd_positions: Array[Vector2] = []
+var cat_crowd_golden: Array[bool] = []
+var cat_crowd_rng := RandomNumberGenerator.new()
+var cat_crowd_fx_time := 0.0
 var hard_drop_fx_timer := 0.0
 var hard_drop_start_cells: Array = []
 var hard_drop_landed_cells: Array = []
 var hard_drop_shock_pixels: Array = []
 var hard_drop_kind := ""
+var lock_flash_timer := 0.0
+var lock_flash_duration := 0.0
+var lock_flash_cells: Array = []
+var lock_flash_kind := ""
+var lock_flash_is_hard := false
+var ending_timer := 0.0
+var ending_preview_mode := false
+var ending_preview_return_state := State.TITLE
+var ending_preview_saved_score := 0
+var controls_visible := false
+var first_gameplay_controls_pending := false
+var controls_resume_gameplay := false
+var pause_after_clear := false
 var piece_randomizer := PieceRandomizer.new()
 var audio: AudioSystem
 var background: Texture2D
@@ -67,26 +116,43 @@ var board_frame: Texture2D
 var panel_textures: Dictionary = {}
 var idle_textures: Array[Texture2D] = []
 var happy_textures: Array[Texture2D] = []
+var golden_cat_texture: Texture2D
 var tile_textures: Dictionary = {}
 var ghost_texture: Texture2D
 var line_clear_frames: Array[Texture2D] = []
+var ending_background: Texture2D
+var ending_cat_sheet: Texture2D
+var ending_score_plaque: Texture2D
+var lantern_texture: Texture2D
 var start_button: Button
 var level_buttons: Array[Button] = []
 var level_select_label: Label
-var line_clear_slider: HSlider
-var line_clear_label: Label
 var music_button: Button
-var debug_tuning_visible := false
+var scores_button: Button
+var back_button: Button
+var pause_button: Button
+var retry_button: Button
+var controls_button: Button
+var controls_close_button: Button
+var name_entry: LineEdit
+var name_submit_button: Button
+var light_fx_layer: Control
 
 func _ready() -> void:
 	setup_input_map()
 	audio = AudioSystem.new()
 	add_child(audio)
-	high_score = SaveSystem.load_high_score()
+	high_scores = SaveSystem.load_high_scores()
+	cat_crowd_rng.randomize()
+	high_score = int(high_scores[0].score) if not high_scores.is_empty() else 0
 	background = load("res://assets/backgrounds/cat_room.png")
 	title_background = load("res://assets/source/titlev2.png")
 	level_select_background = load("res://assets/source/room_background.png")
 	board_frame = load("res://assets/source/framev2.png")
+	ending_background = load("res://assets/endings/stargazer/background.png")
+	ending_cat_sheet = load("res://assets/endings/stargazer/cat_sheet_aligned.png")
+	ending_score_plaque = load("res://assets/endings/stargazer/score_plaque.png")
+	lantern_texture = load("res://assets/endings/lantern.png")
 	panel_textures = {
 		"SCORE": load("res://assets/blocks/score.png"),
 		"LEVEL": load("res://assets/blocks/level.png"),
@@ -96,19 +162,36 @@ func _ready() -> void:
 	for i in range(1, 5):
 		idle_textures.append(load("res://assets/cat/idle_%02d.png" % i))
 		happy_textures.append(load("res://assets/cat/happy_%02d.png" % i))
+	golden_cat_texture = load("res://assets/cat/golden_01.png")
 	load_block_textures()
 	create_start_button()
 	create_level_selector()
-	create_line_clear_tuner()
 	create_music_button()
+	create_score_controls()
+	create_pause_controls()
+	create_controls_screen()
+	create_light_fx_layer()
 	audio.set_music_enabled(bool(SaveSystem.load_setting("music_enabled", true)))
+	# V1 uses a new key because the early draft displayed this on the title. The
+	# release behavior waits until the player can see their first gameplay board.
+	first_gameplay_controls_pending = not bool(SaveSystem.load_setting("gameplay_controls_seen_v1", false))
 	audio.play_title_music()
+	update_menu_controls()
 	set_process(true)
 	queue_redraw()
+	if light_fx_layer:
+		light_fx_layer.queue_redraw()
+
+func create_light_fx_layer() -> void:
+	light_fx_layer = Control.new()
+	light_fx_layer.set_script(load("res://scripts/light_fx_layer.gd"))
+	light_fx_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	light_fx_layer.set("game", self)
+	add_child(light_fx_layer)
 
 func load_block_textures() -> void:
 	for kind in ["I", "O", "T", "S", "Z", "J", "L"]:
-		var path := "res://assets/blocks/processed/tile_%s.png" % kind.to_lower()
+		var path := "res://assets/blocks/wood/tile_%s.png" % kind.to_lower()
 		if ResourceLoader.exists(path):
 			tile_textures[kind] = load(path)
 	ghost_texture = load("res://assets/blocks/processed/ghost.png")
@@ -150,7 +233,7 @@ func create_level_selector() -> void:
 		button.pressed.connect(set_start_level.bind(level_number))
 		add_child(button)
 		level_buttons.append(button)
-	set_start_level(start_level)
+	set_start_level(start_level, false)
 
 func style_menu_button(button: Button) -> void:
 	var normal := StyleBoxFlat.new()
@@ -176,40 +259,23 @@ func style_menu_button(button: Button) -> void:
 func adjust_start_level(amount: int) -> void:
 	set_start_level(start_level + amount)
 
-func set_start_level(value: int) -> void:
-	start_level = clampi(value, 0, GameConfig.MAX_LEVEL)
+func set_start_level(value: int, play_sound := true) -> void:
+	var next_level := clampi(value, 0, GameConfig.MAX_LEVEL)
+	var changed := next_level != start_level
+	start_level = next_level
 	if level_select_label:
 		level_select_label.text = "SELECT STARTING LEVEL  •  %d" % start_level
 	for i in level_buttons.size():
 		level_buttons[i].set_pressed_no_signal(i == start_level)
-
-func create_line_clear_tuner() -> void:
-	line_clear_label = Label.new()
-	line_clear_label.position = Vector2(82, 584)
-	line_clear_label.size = Vector2(196, 20)
-	line_clear_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line_clear_label.add_theme_font_size_override("font_size", 12)
-	add_child(line_clear_label)
-
-	line_clear_slider = HSlider.new()
-	line_clear_slider.position = Vector2(82, 604)
-	line_clear_slider.size = Vector2(196, 24)
-	line_clear_slider.min_value = 0.08
-	line_clear_slider.max_value = 0.40
-	line_clear_slider.step = 0.01
-	line_clear_slider.value = line_clear_seconds
-	line_clear_slider.value_changed.connect(set_line_clear_seconds)
-	add_child(line_clear_slider)
-	set_line_clear_seconds(line_clear_seconds)
+	if changed and play_sound and audio:
+		audio.play_ui_select()
 
 func set_line_clear_seconds(value: float) -> void:
 	line_clear_seconds = clampf(value, 0.08, 0.40)
-	if line_clear_label:
-		line_clear_label.text = "LINE CLEAR  %d ms" % roundi(line_clear_seconds * 1000.0)
 
 func create_music_button() -> void:
 	music_button = Button.new()
-	music_button.position = Vector2(154, 55)
+	music_button.position = Vector2(250, 18)
 	music_button.size = Vector2(98, 23)
 	music_button.focus_mode = Control.FOCUS_NONE
 	music_button.add_theme_font_size_override("font_size", 11)
@@ -218,7 +284,151 @@ func create_music_button() -> void:
 	add_child(music_button)
 	update_music_button()
 
+func create_score_controls() -> void:
+	scores_button = Button.new()
+	scores_button.size = MENU_BUTTON_SIZE
+	scores_button.text = "HIGH SCORES"
+	scores_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(scores_button)
+	scores_button.pressed.connect(show_high_scores)
+	add_child(scores_button)
+
+	back_button = Button.new()
+	back_button.size = MENU_BUTTON_SIZE
+	back_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(back_button)
+	back_button.pressed.connect(secondary_menu_action)
+	add_child(back_button)
+
+	name_entry = LineEdit.new()
+	name_entry.position = Vector2(80, 306)
+	name_entry.size = Vector2(200, 42)
+	name_entry.max_length = 10
+	name_entry.placeholder_text = "YOUR NAME"
+	name_entry.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_entry.add_theme_font_size_override("font_size", 18)
+	name_entry.text_submitted.connect(func(_value: String) -> void: submit_high_score())
+	add_child(name_entry)
+
+	name_submit_button = Button.new()
+	name_submit_button.position = Vector2(90, 364)
+	name_submit_button.size = MENU_BUTTON_SIZE
+	name_submit_button.text = "SAVE SCORE"
+	name_submit_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(name_submit_button)
+	name_submit_button.pressed.connect(submit_high_score)
+	add_child(name_submit_button)
+
+func create_pause_controls() -> void:
+	pause_button = Button.new()
+	pause_button.position = Vector2(6, 5)
+	pause_button.size = Vector2(42, 29)
+	pause_button.text = "II"
+	pause_button.focus_mode = Control.FOCUS_NONE
+	pause_button.add_theme_font_size_override("font_size", 16)
+	style_menu_button(pause_button)
+	pause_button.pressed.connect(toggle_pause)
+	add_child(pause_button)
+
+	retry_button = Button.new()
+	retry_button.size = MENU_BUTTON_SIZE
+	retry_button.text = "RETRY"
+	retry_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(retry_button)
+	retry_button.pressed.connect(retry_game)
+	add_child(retry_button)
+
+func create_controls_screen() -> void:
+	controls_button = Button.new()
+	controls_button.size = MENU_BUTTON_SIZE
+	controls_button.text = "HOW TO PLAY"
+	controls_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(controls_button)
+	controls_button.pressed.connect(open_controls_screen)
+	add_child(controls_button)
+
+	controls_close_button = Button.new()
+	controls_close_button.position = Vector2(90, 515)
+	controls_close_button.size = MENU_BUTTON_SIZE
+	controls_close_button.text = "GOT IT"
+	controls_close_button.focus_mode = Control.FOCUS_ALL
+	style_menu_button(controls_close_button)
+	controls_close_button.pressed.connect(close_controls_screen)
+	add_child(controls_close_button)
+
+func open_controls_screen() -> void:
+	if state not in [State.TITLE, State.PAUSED]:
+		return
+	audio.play_ui_select()
+	controls_resume_gameplay = false
+	controls_visible = true
+	update_menu_controls()
+	controls_close_button.call_deferred("grab_focus")
+	queue_redraw()
+
+func close_controls_screen() -> void:
+	if not controls_visible:
+		return
+	controls_visible = false
+	first_gameplay_controls_pending = false
+	SaveSystem.save_setting("gameplay_controls_seen_v1", true)
+	if controls_resume_gameplay and state == State.PAUSED:
+		controls_resume_gameplay = false
+		state = State.PLAYING
+		audio.set_gameplay_paused(false)
+	audio.play_ui_confirm()
+	update_menu_controls()
+	queue_redraw()
+
+func toggle_pause() -> void:
+	if state == State.PLAYING:
+		state = State.PAUSED
+	elif state == State.PAUSED:
+		state = State.PLAYING
+	else:
+		return
+	audio.set_gameplay_paused(state == State.PAUSED)
+	audio.play_pause(state == State.PAUSED)
+	update_menu_controls()
+	queue_redraw()
+
+func show_high_scores() -> void:
+	if state not in [State.TITLE, State.LEVEL_SELECT, State.GAME_OVER, State.NAME_ENTRY]:
+		return
+	high_scores_return_state = State.GAME_OVER if state == State.NAME_ENTRY else state
+	audio.play_ui_select()
+	name_entry.release_focus()
+	state = State.HIGH_SCORES
+	queue_redraw()
+
+func secondary_menu_action() -> void:
+	audio.play_ui_cancel()
+	if state == State.LEVEL_SELECT:
+		state = State.TITLE
+		queue_redraw()
+	elif state in [State.PAUSED, State.GAME_OVER]:
+		open_level_select(true)
+	elif state == State.HIGH_SCORES:
+		state = high_scores_return_state
+		if state in [State.TITLE, State.LEVEL_SELECT]:
+			audio.play_title_music()
+		queue_redraw()
+
+func submit_high_score() -> void:
+	if state != State.NAME_ENTRY:
+		return
+	var player_name := SaveSystem.sanitize_player_name(name_entry.text)
+	SaveSystem.save_setting("player_name", player_name)
+	high_scores = SaveSystem.add_high_score(player_name, score, level, lines)
+	high_score = int(high_scores[0].score) if not high_scores.is_empty() else 0
+	audio.play_name_saved()
+	name_entry.release_focus()
+	high_scores_return_state = State.GAME_OVER
+	state = State.HIGH_SCORES
+	queue_redraw()
+
 func toggle_music() -> void:
+	audio.play_ui_select()
 	audio.set_music_enabled(not audio.music_enabled)
 	SaveSystem.save_setting("music_enabled", audio.music_enabled)
 	update_music_button()
@@ -236,7 +446,6 @@ func setup_input_map() -> void:
 	bind_keys("pause", [KEY_P, KEY_ESCAPE])
 	bind_keys("retry", [KEY_R])
 	bind_keys("toggle_music", [KEY_M])
-	bind_keys("toggle_tuning", [KEY_F1])
 	bind_joy_button("move_left", JOY_BUTTON_DPAD_LEFT)
 	bind_joy_button("move_right", JOY_BUTTON_DPAD_RIGHT)
 	bind_joy_button("soft_drop", JOY_BUTTON_DPAD_DOWN)
@@ -263,14 +472,23 @@ func _process(delta: float) -> void:
 	update_menu_controls()
 	if hard_drop_fx_timer > 0.0:
 		hard_drop_fx_timer = maxf(0.0, hard_drop_fx_timer - delta)
+	if lock_flash_timer > 0.0:
+		lock_flash_timer = maxf(0.0, lock_flash_timer - delta)
+	if light_fx_layer:
+		light_fx_layer.queue_redraw()
 	cat_frame_timer += delta
 	if cat_frame_timer >= 0.22:
 		cat_frame_timer = 0.0
 		cat_frame = (cat_frame + 1) % 4
 	if cat_happy_timer > 0.0:
 		cat_happy_timer -= delta
+	if cat_crowd_jump_timer > 0.0:
+		cat_crowd_jump_timer = maxf(0.0, cat_crowd_jump_timer - delta)
+	cat_crowd_fx_time += delta
 
-	if state == State.CLEARING:
+	if state == State.ENDING:
+		ending_timer += delta
+	elif state == State.CLEARING:
 		clear_timer -= delta
 		if clear_timer <= 0.0:
 			finish_line_clear()
@@ -294,6 +512,7 @@ func _process(delta: float) -> void:
 				soft_drop_accumulator -= GameConfig.SOFT_DROP_SECONDS
 				if try_move(Vector2i.DOWN):
 					score += 1
+					audio.play_soft_drop()
 				else:
 					soft_drop_accumulator = 0.0
 					break
@@ -312,37 +531,91 @@ func update_menu_controls() -> void:
 	var on_title := state == State.TITLE
 	var on_level_select := state == State.LEVEL_SELECT
 	var on_game_over := state == State.GAME_OVER
+	var on_paused := state == State.PAUSED
+	var on_name_entry := state == State.NAME_ENTRY
+	var on_high_scores := state == State.HIGH_SCORES
 	level_select_label.visible = on_level_select
 	for button in level_buttons:
 		button.visible = on_level_select
-	line_clear_slider.visible = debug_tuning_visible and state in [State.LEVEL_SELECT, State.GAME_OVER]
-	line_clear_label.visible = line_clear_slider.visible
-	start_button.visible = on_level_select or on_game_over
-	music_button.visible = state not in [State.TITLE, State.CLEARING]
-	if on_level_select:
+	start_button.visible = on_level_select or on_game_over or on_paused
+	music_button.visible = state not in [State.CLEARING, State.ENDING, State.NAME_ENTRY]
+	music_button.position = Vector2(250, 18) if state in [State.TITLE, State.LEVEL_SELECT, State.GAME_OVER, State.HIGH_SCORES] else Vector2(154, 55)
+	scores_button.visible = on_level_select or on_game_over
+	back_button.visible = on_level_select or on_game_over or on_high_scores or on_paused
+	pause_button.visible = state == State.PLAYING
+	retry_button.visible = on_paused
+	controls_button.visible = on_paused
+	controls_close_button.visible = controls_visible
+	name_entry.visible = on_name_entry
+	name_submit_button.visible = on_name_entry
+	if on_paused:
+		start_button.position = Vector2(90, 302)
+		start_button.text = "RESUME"
+		retry_button.position = Vector2(90, 348)
+		back_button.position = Vector2(90, 394)
+		back_button.size = MENU_BUTTON_SIZE
+		back_button.text = "LEVEL SELECT"
+		controls_button.position = Vector2(90, 440)
+	elif on_level_select:
 		start_button.position = START_BUTTON_RECT.position
 		start_button.text = "START GAME"
+		scores_button.position = Vector2(115, 324)
+		scores_button.size = Vector2(130, 34)
+		back_button.position = Vector2(115, 596)
+		back_button.size = Vector2(130, 34)
+		back_button.text = "BACK"
 	elif on_game_over:
-		start_button.position = Vector2(90, 392)
+		scores_button.size = MENU_BUTTON_SIZE
+		back_button.size = MENU_BUTTON_SIZE
+		start_button.position = Vector2(90, 370)
 		start_button.text = "RETRY"
+		scores_button.position = Vector2(90, 416)
+		back_button.position = Vector2(90, 462)
+		back_button.text = "LEVEL SELECT"
+	elif on_high_scores:
+		back_button.size = MENU_BUTTON_SIZE
+		back_button.position = Vector2(90, 548)
+		back_button.text = "BACK"
+	if controls_visible:
+		for control: Control in [level_select_label, start_button, music_button, scores_button, back_button, pause_button, retry_button, controls_button, name_entry, name_submit_button]:
+			control.visible = false
+		for button in level_buttons:
+			button.visible = false
+		controls_close_button.visible = true
 
 func _input(event: InputEvent) -> void:
 	# Remember touch activity before routing by game state. Godot may emit a
 	# synthetic mouse click immediately afterward, including across menus.
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		last_touch_event_msec = Time.get_ticks_msec()
+	if controls_visible:
+		if is_confirm_input(event) \
+			or (event is InputEventScreenTouch and event.pressed) \
+			or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and should_handle_pointer_mouse()):
+			close_controls_screen()
+			get_viewport().set_input_as_handled()
+		return
+	if handle_debug_ending_shortcut(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("toggle_music"):
 		toggle_music()
 		return
-	if event.is_action_pressed("toggle_tuning") and state in [State.LEVEL_SELECT, State.GAME_OVER]:
-		debug_tuning_visible = not debug_tuning_visible
+	if state == State.CLEARING and (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		handle_touch_during_clear(event)
+		return
+	if state == State.ENDING:
+		if ending_timer >= ENDING_SKIP_DELAY and is_ending_advance_input(event):
+			complete_ending()
+			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("retry") and state in [State.PLAYING, State.CLEARING, State.PAUSED, State.GAME_OVER]:
 		retry_game()
 		return
 	if event.is_action_pressed("pause") and state in [State.PLAYING, State.PAUSED]:
-		state = State.PLAYING if state == State.PAUSED else State.PAUSED
-		audio.set_gameplay_paused(state == State.PAUSED)
+		toggle_pause()
+		return
+	if is_pointer_over_menu_control(event):
 		return
 	if state == State.TITLE:
 		if is_title_start_input(event):
@@ -353,7 +626,7 @@ func _input(event: InputEvent) -> void:
 		if handle_menu_input(event):
 			get_viewport().set_input_as_handled()
 			return
-		if (state == State.LEVEL_SELECT and is_confirm_input(event)) or (state == State.GAME_OVER and is_start_input(event)):
+		if (state == State.LEVEL_SELECT and is_confirm_input(event)) or (state == State.GAME_OVER and is_confirm_input(event)):
 			start_game()
 			get_viewport().set_input_as_handled()
 			return
@@ -376,7 +649,10 @@ func _input(event: InputEvent) -> void:
 
 func is_start_input(event: InputEvent) -> bool:
 	if event is InputEventKey:
-		return event.pressed and not event.echo
+		# Android exposes hardware volume changes as key events. Restrict keyboard
+		# start to deliberate confirm keys so volume never advances the title.
+		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		return event.pressed and not event.echo and key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_X]
 	if event is InputEventJoypadButton:
 		return event.pressed
 	# Pointer input is handled by the real Start/Restart button so the level
@@ -391,6 +667,30 @@ func is_confirm_input(event: InputEvent) -> bool:
 		return event.pressed and event.button_index in [JOY_BUTTON_A, JOY_BUTTON_START]
 	return false
 
+func handle_debug_ending_shortcut(event: InputEvent) -> bool:
+	if not OS.is_debug_build() or not (event is InputEventKey) or not event.pressed or event.echo:
+		return false
+	var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	# Godot reserves F7/F8 while running from the editor (F8 stops the game), so
+	# the number keys are the dependable in-editor preview shortcuts. Keep the
+	# function keys as aliases for standalone debug builds.
+	if key in [KEY_7, KEY_F7]:
+		open_ending_preview(false)
+		return true
+	if key in [KEY_8, KEY_F8]:
+		open_ending_preview(true)
+		return true
+	return false
+
+func is_ending_advance_input(event: InputEvent) -> bool:
+	if is_confirm_input(event):
+		return true
+	if event is InputEventMouseButton:
+		return event.pressed and event.button_index == MOUSE_BUTTON_LEFT and should_handle_pointer_mouse()
+	if event is InputEventScreenTouch:
+		return event.pressed
+	return false
+
 func is_title_start_input(event: InputEvent) -> bool:
 	if is_start_input(event):
 		return true
@@ -399,6 +699,44 @@ func is_title_start_input(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return event.pressed
 	return false
+
+func is_pointer_over_menu_control(event: InputEvent) -> bool:
+	var pointer_position := Vector2(-1, -1)
+	if event is InputEventMouseButton:
+		pointer_position = event.position
+	elif event is InputEventScreenTouch:
+		pointer_position = event.position
+	if pointer_position.x < 0.0:
+		return false
+	for control: Control in [music_button, scores_button, back_button, start_button, pause_button, retry_button, controls_button, controls_close_button, name_entry, name_submit_button]:
+		if control and control.visible and control.get_global_rect().has_point(pointer_position):
+			return true
+	return false
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		handle_android_back()
+
+func handle_android_back() -> void:
+	if controls_visible:
+		close_controls_screen()
+		return
+	match state:
+		State.PLAYING, State.PAUSED:
+			toggle_pause()
+		State.CLEARING:
+			pause_after_clear = true
+		State.LEVEL_SELECT, State.HIGH_SCORES, State.GAME_OVER:
+			secondary_menu_action()
+		State.NAME_ENTRY:
+			name_entry.release_focus()
+			state = State.GAME_OVER
+			update_menu_controls()
+			queue_redraw()
+		# Back on the title and during an ending is deliberately inert. Android's
+		# Home gesture remains the safe way to leave without an accidental quit.
+		_:
+			pass
 
 func handle_menu_input(event: InputEvent) -> bool:
 	if state == State.LEVEL_SELECT and event is InputEventKey and event.pressed and not event.echo:
@@ -439,13 +777,20 @@ func handle_menu_input(event: InputEvent) -> bool:
 func primary_menu_action() -> void:
 	if state == State.TITLE:
 		open_level_select()
+	elif state == State.PAUSED:
+		toggle_pause()
 	elif state in [State.LEVEL_SELECT, State.GAME_OVER]:
 		start_game()
 
-func open_level_select() -> void:
-	if state != State.TITLE:
+func open_level_select(force := false) -> void:
+	if state != State.TITLE and not force:
 		return
+	var from_title := state == State.TITLE
 	state = State.LEVEL_SELECT
+	if from_title:
+		audio.play_ui_confirm()
+	audio.play_title_music()
+	update_menu_controls()
 	start_button.release_focus()
 	level_buttons[start_level].call_deferred("grab_focus")
 	queue_redraw()
@@ -467,28 +812,57 @@ func handle_touch(event: InputEventScreenTouch) -> void:
 		# release the active piece gesture.
 		if touch_active:
 			return
-		touch_active = true
-		touch_index = event.index
-		touch_start = event.position
-		touch_last = event.position
-		touch_press_msec = Time.get_ticks_msec()
-		touch_drag_remainder = Vector2.ZERO
-		touch_down_transition = 0.0
-		touch_transition_start_msec = touch_press_msec
-		touch_vertical_start_y = event.position.y
-		touch_vertical_start_msec = touch_press_msec
-		touch_horizontal_direction = 0
-		touch_horizontal_reversed = false
-		touch_gesture = TouchGesture.CONTROLS if music_button and music_button.get_global_rect().has_point(event.position) else TouchGesture.PENDING
+		begin_touch_gesture(event.index, event.position)
 		return
 	if not touch_active or event.index != touch_index:
 		return
 	process_touch_motion(event.position)
 	var completed_gesture := touch_gesture
-	touch_active = false
-	touch_index = -1
+	reset_touch_gesture()
 	if completed_gesture == TouchGesture.PENDING:
 		try_rotate()
+
+func begin_touch_gesture(index: int, position: Vector2) -> void:
+	touch_active = true
+	touch_index = index
+	rebase_touch_gesture(position)
+	touch_gesture = TouchGesture.CONTROLS if music_button and music_button.get_global_rect().has_point(position) else TouchGesture.PENDING
+
+func rebase_touch_gesture(position: Vector2) -> void:
+	var now_msec := Time.get_ticks_msec()
+	touch_start = position
+	touch_last = position
+	touch_press_msec = now_msec
+	touch_drag_remainder = Vector2.ZERO
+	touch_down_transition = 0.0
+	touch_transition_start_msec = now_msec
+	touch_vertical_start_y = position.y
+	touch_vertical_start_msec = now_msec
+	touch_horizontal_direction = 0
+	touch_horizontal_reversed = false
+	touch_gesture = TouchGesture.PENDING
+
+func reset_touch_gesture() -> void:
+	touch_active = false
+	touch_index = -1
+	touch_gesture = TouchGesture.PENDING
+	touch_drag_remainder = Vector2.ZERO
+	touch_down_transition = 0.0
+	touch_horizontal_direction = 0
+	touch_horizontal_reversed = false
+
+func handle_touch_during_clear(event: InputEvent) -> void:
+	# The locked piece cannot accept gameplay movement, but Android touch life-cycle
+	# events still have to be consumed. Track a fresh hold and continuously rebase
+	# it so the first post-clear drag controls the newly spawned piece immediately.
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if not touch_active:
+				begin_touch_gesture(event.index, event.position)
+		elif touch_active and event.index == touch_index:
+			reset_touch_gesture()
+	elif event is InputEventScreenDrag and touch_active and event.index == touch_index:
+		rebase_touch_gesture(event.position)
 
 func handle_touch_drag(event: InputEventScreenDrag) -> void:
 	last_touch_event_msec = Time.get_ticks_msec()
@@ -562,6 +936,7 @@ func process_touch_motion(position: Vector2) -> void:
 		while touch_drag_remainder.y >= TOUCH_VERTICAL_STEP_PIXELS:
 			if try_move(Vector2i.DOWN):
 				score += 1
+				audio.play_soft_drop()
 			touch_drag_remainder.y -= TOUCH_VERTICAL_STEP_PIXELS
 
 func should_handle_pointer_mouse() -> bool:
@@ -588,6 +963,7 @@ func process_keyboard_repeat(delta: float) -> void:
 func start_game() -> void:
 	if state not in [State.LEVEL_SELECT, State.GAME_OVER]:
 		return
+	audio.play_ui_confirm()
 	start_button.hide()
 	start_button.release_focus()
 	board.clear()
@@ -600,11 +976,34 @@ func start_game() -> void:
 	clear_timer = 0.0
 	clearing_rows.clear()
 	hard_drop_fx_timer = 0.0
+	lock_flash_timer = 0.0
+	lock_flash_cells.clear()
+	ending_timer = 0.0
+	cat_crowd_jump_timer = 0.0
+	cat_crowd_positions.clear()
+	cat_crowd_golden.clear()
+	cat_crowd_fx_time = 0.0
+	cat_crowd_rng.randomize()
+	ending_preview_mode = false
+	pause_after_clear = false
+	reset_touch_gesture()
 	piece_randomizer.reset()
 	next_kind = piece_randomizer.next_piece()
 	state = State.PLAYING
+	update_menu_controls()
 	audio.play_game_music()
 	spawn_piece()
+	if state == State.PLAYING and first_gameplay_controls_pending:
+		show_first_gameplay_controls()
+
+func show_first_gameplay_controls() -> void:
+	controls_resume_gameplay = true
+	controls_visible = true
+	state = State.PAUSED
+	audio.set_gameplay_paused(true)
+	update_menu_controls()
+	controls_close_button.call_deferred("grab_focus")
+	queue_redraw()
 
 func retry_game() -> void:
 	# A dedicated entry point keeps retry behavior consistent across game-over,
@@ -619,12 +1018,56 @@ func spawn_piece() -> void:
 	soft_drop_accumulator = 0.0
 	lock_timer = 0.0
 	if not board.fits(active, active.position, active.rotation):
+		finish_run()
+
+func finish_run() -> void:
+	if state == State.ENDING:
+		return
+	audio.stop_music()
+	ending_preview_mode = false
+	ending_timer = 0.0
+	state = State.ENDING
+	audio.play_ending_music()
+	update_menu_controls()
+	queue_redraw()
+
+func complete_ending() -> void:
+	if state != State.ENDING:
+		return
+	audio.stop_music()
+	if ending_preview_mode:
+		state = ending_preview_return_state
+		score = ending_preview_saved_score
+		ending_preview_mode = false
+		if state in [State.TITLE, State.LEVEL_SELECT, State.HIGH_SCORES]:
+			audio.play_title_music()
+		update_menu_controls()
+		queue_redraw()
+		return
+	if SaveSystem.qualifies_for_high_score(score, high_scores):
+		audio.play_high_score()
+		state = State.NAME_ENTRY
+		name_entry.text = str(SaveSystem.load_setting("player_name", ""))
+		name_entry.call_deferred("grab_focus")
+	else:
 		state = State.GAME_OVER
-		audio.stop_music()
-		audio.play_game_over()
-		if score > high_score:
-			high_score = score
-			SaveSystem.save_high_score(high_score)
+	update_menu_controls()
+	queue_redraw()
+
+func open_ending_preview(lantern := false) -> void:
+	if state not in [State.TITLE, State.LEVEL_SELECT, State.GAME_OVER, State.HIGH_SCORES] and not ending_preview_mode:
+		return
+	if not ending_preview_mode:
+		ending_preview_return_state = state
+		ending_preview_saved_score = score
+	ending_preview_mode = true
+	score = LANTERN_ENDING_SCORE if lantern else LANTERN_ENDING_SCORE - 1
+	ending_timer = 0.0
+	state = State.ENDING
+	audio.stop_music()
+	audio.play_ending_music()
+	update_menu_controls()
+	queue_redraw()
 
 func try_move(offset: Vector2i) -> bool:
 	var target := active.position + offset
@@ -648,6 +1091,7 @@ func try_rotate() -> void:
 			lock_timer = 0.0
 			audio.play_rotate()
 			return
+	audio.play_invalid()
 
 func hard_drop() -> void:
 	var start_position := active.position
@@ -656,8 +1100,8 @@ func hard_drop() -> void:
 		distance += 1
 	begin_hard_drop_fx(start_position)
 	score += distance * 2
-	audio.play_drop()
-	lock_piece()
+	audio.play_drop(distance)
+	lock_piece(false, true)
 
 func begin_hard_drop_fx(start_position: Vector2i) -> void:
 	hard_drop_kind = active.kind
@@ -689,14 +1133,26 @@ func build_hard_drop_shock() -> void:
 			"color": color,
 		})
 
-func lock_piece() -> void:
+func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
+	begin_lock_flash(is_hard_drop)
+	if play_lock_sound:
+		audio.play_lock()
 	board.place(active)
+	# Tetris resolves every complete row as soon as a piece locks. The next
+	# piece is not spawned until the clear animation and removal finish.
 	clearing_rows = board.full_rows()
 	if clearing_rows.is_empty():
 		spawn_piece()
 	else:
 		state = State.CLEARING
 		clear_timer = line_clear_seconds
+
+func begin_lock_flash(is_hard_drop: bool) -> void:
+	lock_flash_cells = active.cells().duplicate()
+	lock_flash_kind = active.kind
+	lock_flash_is_hard = is_hard_drop
+	lock_flash_duration = HARD_LOCK_FLASH_SECONDS if is_hard_drop else NORMAL_LOCK_FLASH_SECONDS
+	lock_flash_timer = lock_flash_duration
 
 func finish_line_clear() -> void:
 	# Revalidate after the visual pause so only genuinely complete rows can be removed.
@@ -706,17 +1162,35 @@ func finish_line_clear() -> void:
 		clearing_rows.clear()
 		state = State.PLAYING
 		spawn_piece()
+		pause_if_requested_after_clear()
 		return
 	board.remove_rows(clearing_rows)
+	lock_flash_timer = 0.0
+	lock_flash_cells.clear()
 	audio.play_clear(count)
+	var previous_level := level
 	score += GameConfig.LINE_POINTS[count] * (level + 1)
 	lines += count
+	if count == 4:
+		add_crowd_cats(1, true)
+	else:
+		add_crowd_cats(count)
 	level = mini(start_level + floori(lines / 10.0), GameConfig.MAX_LEVEL)
+	if level > previous_level:
+		audio.play_level_up()
 	if count == 4:
 		cat_happy_timer = 1.5
+		cat_crowd_jump_timer = CAT_CROWD_JUMP_SECONDS
 	clearing_rows.clear()
 	state = State.PLAYING
 	spawn_piece()
+	pause_if_requested_after_clear()
+
+func pause_if_requested_after_clear() -> void:
+	if not pause_after_clear or state != State.PLAYING:
+		return
+	pause_after_clear = false
+	toggle_pause()
 
 func ghost_y() -> int:
 	var y := active.position.y
@@ -733,6 +1207,8 @@ func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false, 
 	var texture: Texture2D = ghost_texture if use_ghost else tile_textures.get(kind)
 	if texture:
 		draw_texture_rect(texture, Rect2(pos, Vector2(tile_size, tile_size)), false, Color(1, 1, 1, alpha))
+		if not use_ghost:
+			draw_wood_grain(pos, tile_size, kind, alpha)
 		return
 	var color: Color = GameConfig.COLORS[kind]
 	color.a = alpha
@@ -742,6 +1218,17 @@ func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false, 
 	draw_line(pos + Vector2(2,2), pos + Vector2(2, tile_size - 3.0), Color(1,1,1,0.20 * alpha), 1.0)
 	draw_line(pos + Vector2(2, tile_size - 2.0), pos + Vector2(tile_size - 2.0, tile_size - 2.0), Color(0,0,0,0.30 * alpha), 1.0)
 	draw_line(pos + Vector2(tile_size - 2.0, 2), pos + Vector2(tile_size - 2.0, tile_size - 2.0), Color(0,0,0,0.30 * alpha), 1.0)
+	draw_wood_grain(pos, tile_size, kind, alpha)
+
+func draw_wood_grain(pos: Vector2, tile_size: float, kind: String, alpha: float) -> void:
+	var inset := maxf(2.0, floorf(tile_size * 0.16))
+	var seed := kind.unicode_at(0) % 4
+	var grain_color := Color(0.18, 0.10, 0.055, 0.18 * alpha)
+	var highlight := Color(1.0, 0.84, 0.58, 0.10 * alpha)
+	var first_y := pos.y + floorf(tile_size * (0.36 + seed * 0.015))
+	var second_y := pos.y + floorf(tile_size * (0.68 - seed * 0.012))
+	draw_line(Vector2(pos.x + inset, first_y), Vector2(pos.x + tile_size - inset - 1.0, first_y + 1.0), grain_color, 1.0)
+	draw_line(Vector2(pos.x + inset + 2.0, second_y), Vector2(pos.x + tile_size - inset - 2.0, second_y - 1.0), highlight, 1.0)
 
 func draw_panel(rect: Rect2, title: String, value: String) -> void:
 	var texture: Texture2D = panel_textures.get(title)
@@ -759,9 +1246,17 @@ func draw_panel(rect: Rect2, title: String, value: String) -> void:
 func _draw() -> void:
 	if state == State.TITLE:
 		draw_title_screen()
+		if controls_visible:
+			draw_controls_screen()
 		return
 	if state == State.LEVEL_SELECT:
 		draw_level_select_screen()
+		return
+	if state == State.HIGH_SCORES:
+		draw_high_scores_screen()
+		return
+	if state == State.ENDING:
+		draw_stargazer_ending()
 		return
 	if background:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
@@ -792,6 +1287,7 @@ func _draw() -> void:
 				draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
 			if cell.y >= 0: draw_tile(cell, active.kind)
+	draw_cat_crowd()
 	# Compact top HUD keeps all gameplay data clear of the playfield.
 	draw_rect(Rect2(0, 0, 360, 108), Color(0.055, 0.045, 0.038, 0.90))
 	draw_rect(Rect2(0, 106, 360, 2), WOOD_LIGHT)
@@ -822,15 +1318,204 @@ func _draw() -> void:
 		draw_texture_rect(cat_texture, Rect2(4, 39, 46, 63), false)
 	draw_string(ThemeDB.fallback_font, Vector2(154, 97), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 98, 10, Color("c8ad7f"))
 	if state == State.PAUSED:
-		draw_overlay("PAUSED", "P: RESUME   •   R: RETRY")
+		draw_overlay("PAUSED", "")
 	elif state == State.GAME_OVER:
 		draw_game_over_overlay()
+	elif state == State.NAME_ENTRY:
+		draw_name_entry_overlay()
+	if controls_visible:
+		draw_controls_screen()
+
+func cat_crowd_count() -> int:
+	return cat_crowd_positions.size()
+
+func add_crowd_cats(count: int, golden := false) -> void:
+	for _cat in maxi(0, count):
+		cat_crowd_positions.append(Vector2(
+			cat_crowd_rng.randf_range(CAT_CROWD_MIN.x, CAT_CROWD_MAX.x),
+			cat_crowd_rng.randf_range(CAT_CROWD_MIN.y, CAT_CROWD_MAX.y)
+		))
+		cat_crowd_golden.append(golden)
+
+func golden_cat_count() -> int:
+	return cat_crowd_golden.count(true)
+
+func draw_cat_crowd() -> void:
+	if idle_textures.is_empty() or cat_crowd_count() == 0:
+		return
+	var cat_texture: Texture2D = idle_textures[0]
+	if not cat_texture:
+		return
+	var jump_offset := 0.0
+	if cat_crowd_jump_timer > 0.0:
+		var jump_progress := 1.0 - cat_crowd_jump_timer / CAT_CROWD_JUMP_SECONDS
+		jump_offset = sin(jump_progress * PI) * 11.0
+	# Positions are rolled only when cats are earned, so the crowd is random but
+	# visually stable. Overlap is intentional; CAT_CROWD_MIN.x is the hard wooden
+	# boundary and the screen edge naturally clips the far side.
+	for cat_index in range(cat_crowd_count() - 1, -1, -1):
+		if cat_crowd_golden[cat_index]:
+			continue
+		var position := cat_crowd_positions[cat_index] - Vector2(0, jump_offset)
+		draw_texture_rect(cat_texture, Rect2(position, CAT_CROWD_SIZE), false)
+	if not golden_cat_texture:
+		return
+	# Golden Tetris cats render last so their reward glow is never buried by the
+	# ordinary crowd. The aura stays outside the playfield boundary.
+	for cat_index in range(cat_crowd_count() - 1, -1, -1):
+		if not cat_crowd_golden[cat_index]:
+			continue
+		var position := cat_crowd_positions[cat_index] - Vector2(0, jump_offset)
+		var center := position + CAT_CROWD_SIZE * 0.5
+		var pulse := 0.82 + 0.18 * sin(cat_crowd_fx_time * 4.2 + cat_index)
+		draw_circle(center, 19.0 * pulse, Color(1.0, 0.67, 0.12, 0.035))
+		draw_circle(center, 15.0 * pulse, Color(1.0, 0.79, 0.24, 0.065))
+		draw_circle(center, 11.0 * pulse, Color(1.0, 0.91, 0.52, 0.10))
+		draw_texture_rect(golden_cat_texture, Rect2(position, CAT_CROWD_SIZE), false)
+
+func draw_stargazer_ending() -> void:
+	if ending_background:
+		draw_texture_rect(ending_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("07162d"))
+	var lantern_ending := ending_name() == "LANTERN"
+	if lantern_ending:
+		draw_lantern_warmth()
+
+	# A restrained shooting star gives the otherwise still illustration one
+	# memorable event without competing with the supplied art.
+	if not lantern_ending and ending_timer >= 2.0 and ending_timer <= 3.55:
+		var star_progress := (ending_timer - 2.0) / 1.55
+		var star_head := Vector2(334.0, 102.0).lerp(ENDING_NEW_STAR_POSITION, star_progress)
+		var trail_direction := Vector2(1.0, -0.46).normalized()
+		var trail_length := lerpf(18.0, 68.0, sin(star_progress * PI))
+		var star_alpha := sin(star_progress * PI)
+		draw_line(star_head, star_head + trail_direction * trail_length, Color(0.54, 0.75, 1.0, 0.16 * star_alpha), 9.0)
+		draw_line(star_head, star_head + trail_direction * trail_length, Color(0.76, 0.88, 1.0, 0.42 * star_alpha), 4.0)
+		draw_line(star_head, star_head + trail_direction * trail_length, Color(1.0, 0.96, 0.78, 0.92 * star_alpha), 1.25)
+		draw_twinkle_star(star_head, ending_timer * 10.0, star_alpha, 0.78)
+	if not lantern_ending and ending_timer >= 3.55:
+		var birth_alpha := smoothstep(0.0, 1.0, clampf((ending_timer - 3.55) / 0.55, 0.0, 1.0))
+		draw_twinkle_star(ENDING_NEW_STAR_POSITION, ending_timer * 4.8, birth_alpha, 1.0)
+	elif lantern_ending:
+		draw_ambient_lanterns()
+		draw_rising_lanterns()
+
+	var content_alpha := smoothstep(0.0, 1.0, clampf((ending_timer - 0.35) / 1.1, 0.0, 1.0))
+	var title_color := Color(1.0, 0.82, 0.42, content_alpha) if lantern_ending else Color(0.98, 0.91, 0.72, content_alpha)
+	var title_shadow := Color(0.02, 0.04, 0.10, 0.72 * content_alpha)
+	draw_string(ThemeDB.fallback_font, Vector2(31, 258), "YOUR ENDING IS", HORIZONTAL_ALIGNMENT_CENTER, 300, 14, title_shadow)
+	draw_string(ThemeDB.fallback_font, Vector2(30, 257), "YOUR ENDING IS", HORIZONTAL_ALIGNMENT_CENTER, 300, 14, Color(0.82, 0.87, 0.95, content_alpha))
+	draw_string(ThemeDB.fallback_font, Vector2(31, 292), ending_name(), HORIZONTAL_ALIGNMENT_CENTER, 300, 27, title_shadow)
+	draw_string(ThemeDB.fallback_font, Vector2(30, 290), ending_name(), HORIZONTAL_ALIGNMENT_CENTER, 300, 27, title_color)
+
+	if ending_cat_sheet:
+		var sequence_index := int(ending_timer / ENDING_CAT_FRAME_SECONDS) % ENDING_CAT_SEQUENCE.size()
+		var frame_index: int = ENDING_CAT_SEQUENCE[sequence_index]
+		var source_column := frame_index % 3
+		var source_row := frame_index / 3
+		var source_rect := Rect2(source_column * 512, source_row * 512, 512, 512)
+		draw_texture_rect_region(ending_cat_sheet, Rect2(132, 427, 96, 96), source_rect, Color(1, 1, 1, content_alpha))
+
+	if ending_score_plaque:
+		draw_texture_rect(ending_score_plaque, Rect2(48, 526, 264, 89), false, Color(1, 1, 1, content_alpha))
+		draw_string(ThemeDB.fallback_font, Vector2(76, 574), "FINAL SCORE  %06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 208, 16, Color(0.98, 0.89, 0.68, content_alpha))
+	else:
+		draw_string(ThemeDB.fallback_font, Vector2(58, 574), "FINAL SCORE  %06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 244, 17, title_color)
+
+	if ending_timer >= ENDING_SKIP_DELAY:
+		var prompt_alpha := (0.48 + sin(ending_timer * 3.0) * 0.16) * content_alpha
+		draw_string(ThemeDB.fallback_font, Vector2(70, 628), "TAP OR PRESS TO CONTINUE", HORIZONTAL_ALIGNMENT_CENTER, 220, 10, Color(0.82, 0.84, 0.88, prompt_alpha))
+
+	var fade_alpha := 0.0
+	if ending_timer < 0.7:
+		fade_alpha = 1.0 - ending_timer / 0.7
+	if fade_alpha > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color(0.0, 0.0, 0.0, clampf(fade_alpha, 0.0, 1.0)))
+
+func ending_name() -> String:
+	return "LANTERN" if score >= LANTERN_ENDING_SCORE else "STARGAZER"
+
+func draw_lantern_warmth() -> void:
+	var warmth := smoothstep(0.0, 1.0, clampf((ending_timer - 0.25) / 2.6, 0.0, 1.0))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color(0.34, 0.12, 0.018, 0.105 * warmth))
+	# Nested, very low-alpha pools behave as a soft grade while preserving every
+	# detail in the original rooftop painting.
+	draw_circle(Vector2(180, 414), 235.0, Color(1.0, 0.42, 0.06, 0.018 * warmth))
+	draw_circle(Vector2(180, 430), 178.0, Color(1.0, 0.52, 0.08, 0.022 * warmth))
+	draw_circle(Vector2(180, 446), 118.0, Color(1.0, 0.66, 0.16, 0.026 * warmth))
+
+func draw_rising_lanterns() -> void:
+	# Begin the release with the ending itself. The first group launches together;
+	# later lanterns follow quickly without changing their ascent duration.
+	var lantern_time := maxf(0.0, ending_timer)
+	for lantern_index in 18:
+		var queued_index := maxi(0, lantern_index - LANTERN_INITIAL_RISING_COUNT + 1)
+		var delay := queued_index * LANTERN_RISING_SPAWN_SECONDS
+		var elapsed := lantern_time - delay
+		if elapsed < 0.0:
+			continue
+		var duration := 24.0 + float((lantern_index * 7) % 9) * 1.02
+		var progress := fposmod(elapsed, duration) / duration
+		# Every launch point sits on the distant horizon behind the cathedral.
+		# The opening fade lets each lantern appear from behind the roofline rather
+		# than drawing across the foreground terrace or telescope.
+		# A low-discrepancy step spreads consecutive launches across the church
+		# horizon instead of forming two obvious vertical columns at high density.
+		var start_x := 176.0 + float((lantern_index * 43) % 136)
+		var drift := sin(progress * TAU + lantern_index * 1.37) * (5.0 + float(lantern_index % 3) * 2.0)
+		var position := Vector2(start_x + drift, lerpf(374.0, 48.0, progress))
+		var depth_scale := 0.88 + float((lantern_index * 5) % 6) * 0.055
+		# Fade across a fraction of a second, not a fraction of the long flight.
+		var launch_fade := smoothstep(0.0, 0.20, elapsed)
+		var edge_fade := launch_fade * (1.0 - smoothstep(0.88, 1.0, progress))
+		draw_lantern(position, depth_scale, lantern_time * 4.0 + lantern_index, edge_fade)
+
+func draw_ambient_lanterns() -> void:
+	# These distant lanterns are already gathered in the church-tower depth
+	# layer when the scene opens. They hover rather than joining the ascent.
+	var reveal := smoothstep(0.0, 1.0, clampf(ending_timer / 0.9, 0.0, 1.0))
+	for lantern_index in LANTERN_AMBIENT_POSITIONS.size():
+		var phase := ending_timer * (0.72 + lantern_index * 0.035) + lantern_index * 1.31
+		var bob := sin(phase) * (1.4 + float(lantern_index % 3) * 0.45)
+		var position: Vector2 = LANTERN_AMBIENT_POSITIONS[lantern_index] + Vector2(0, bob)
+		var depth_scale := 0.72 + float((lantern_index * 3) % 5) * 0.035
+		draw_lantern(position, depth_scale, phase * 3.2, reveal * 0.82)
+
+func draw_lantern(position: Vector2, scale: float, phase: float, alpha: float) -> void:
+	var flicker := 0.82 + 0.18 * sin(phase)
+	var glow_alpha := alpha * flicker
+	draw_circle(position, 16.0 * scale, Color(1.0, 0.46, 0.06, 0.045 * glow_alpha))
+	draw_circle(position, 11.0 * scale, Color(1.0, 0.65, 0.12, 0.085 * glow_alpha))
+	draw_circle(position, 7.0 * scale, Color(1.0, 0.83, 0.34, 0.15 * glow_alpha))
+	if lantern_texture:
+		var sprite_size := Vector2(13.0, 16.25) * scale
+		var tilt := sin(phase * 0.31) * 0.055
+		draw_set_transform(position, tilt, Vector2.ONE)
+		draw_texture_rect(lantern_texture, Rect2(-sprite_size * 0.5, sprite_size), false, Color(1.0, 0.94 + 0.06 * flicker, 0.82 + 0.18 * flicker, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func draw_twinkle_star(position: Vector2, phase: float, alpha: float, scale: float) -> void:
+	var pulse := 0.76 + 0.24 * sin(phase)
+	var fast_pulse := 0.70 + 0.30 * sin(phase * 1.73 + 0.8)
+	var vertical_radius := 7.2 * scale * pulse
+	var horizontal_radius := 5.4 * scale * fast_pulse
+	var diagonal_radius := 3.2 * scale * (0.82 + 0.18 * sin(phase * 1.31))
+	draw_circle(position, 8.0 * scale, Color(0.48, 0.72, 1.0, 0.13 * alpha * pulse))
+	draw_line(position - Vector2(0, vertical_radius), position + Vector2(0, vertical_radius), Color(0.86, 0.94, 1.0, 0.82 * alpha), 1.15)
+	draw_line(position - Vector2(horizontal_radius, 0), position + Vector2(horizontal_radius, 0), Color(1.0, 0.92, 0.68, 0.88 * alpha), 1.15)
+	var diagonal := Vector2(diagonal_radius, diagonal_radius)
+	draw_line(position - diagonal, position + diagonal, Color(0.72, 0.86, 1.0, 0.48 * alpha), 0.8)
+	draw_line(position - Vector2(diagonal.x, -diagonal.y), position + Vector2(diagonal.x, -diagonal.y), Color(0.72, 0.86, 1.0, 0.42 * alpha), 0.8)
+	draw_circle(position, 2.0 * scale, Color(1.0, 0.97, 0.78, alpha))
 
 func draw_title_screen() -> void:
 	if title_background:
 		draw_texture_rect(title_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false)
 	else:
 		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("07162d"))
+	if OS.is_debug_build():
+		draw_string(ThemeDB.fallback_font, Vector2(45, 630), "DEBUG  7: STARGAZER   8: LANTERN", HORIZONTAL_ALIGNMENT_CENTER, 270, 8, Color(0.72, 0.77, 0.86, 0.78))
 
 func draw_level_select_screen() -> void:
 	if level_select_background:
@@ -840,22 +1525,47 @@ func draw_level_select_screen() -> void:
 	draw_rect(Rect2(36, 366, 288, 226), Color(0.055, 0.05, 0.04, 0.91))
 	draw_rect(Rect2(36, 366, 288, 226), Color("b8935d"), false, 2.0)
 	draw_string(ThemeDB.fallback_font, Vector2(50, 395), "CHOOSE YOUR PACE", HORIZONTAL_ALIGNMENT_CENTER, 260, 20, CREAM)
-	draw_string(ThemeDB.fallback_font, Vector2(50, 616), "LEFT / RIGHT OR NUMBER KEYS 0–9", HORIZONTAL_ALIGNMENT_CENTER, 260, 9, Color("d0bd91"))
+
+func draw_high_scores_screen() -> void:
+	if level_select_background:
+		draw_texture_rect(level_select_background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.42, 0.42, 0.42, 1.0))
+	else:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("241b15"))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color(0.03, 0.025, 0.02, 0.48))
+	if board_frame:
+		draw_texture_rect(board_frame, Rect2(-16, -33, 364, 753), false)
+	var panel := Rect2(55, 112, 250, 430)
+	draw_rect(panel, Color("111315"))
+	draw_string(ThemeDB.fallback_font, Vector2(66, 154), "HIGH SCORES", HORIZONTAL_ALIGNMENT_CENTER, 228, 25, CREAM)
+	draw_line(Vector2(75, 170), Vector2(285, 170), WOOD_LIGHT, 2.0)
+	if high_scores.is_empty():
+		draw_string(ThemeDB.fallback_font, Vector2(70, 254), "NO SCORES YET", HORIZONTAL_ALIGNMENT_CENTER, 220, 16, Color("c8ad7f"))
+	else:
+		for i in mini(high_scores.size(), SaveSystem.MAX_HIGH_SCORES):
+			var entry: Dictionary = high_scores[i]
+			var row_y := 202.0 + i * 30.0
+			var rank_color := Color("f0d58f") if i < 3 else Color("c8ad7f")
+			draw_string(ThemeDB.fallback_font, Vector2(70, row_y), "%2d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, 24, 13, rank_color)
+			draw_string(ThemeDB.fallback_font, Vector2(98, row_y), str(entry.name), HORIZONTAL_ALIGNMENT_LEFT, 94, 13, CREAM)
+			draw_string(ThemeDB.fallback_font, Vector2(190, row_y), "%06d" % int(entry.score), HORIZONTAL_ALIGNMENT_RIGHT, 98, 13, rank_color)
 
 func draw_game_over_overlay() -> void:
-	var rect := Rect2(46, 220, 268, 232)
+	var rect := Rect2(46, 210, 268, 306)
 	draw_rect(rect, Color(0.06,0.05,0.04,0.96))
 	draw_rect(rect, WOOD_LIGHT, false, 3.0)
-	draw_string(ThemeDB.fallback_font, Vector2(58, 270), "GAME OVER", HORIZONTAL_ALIGNMENT_CENTER, 244, 28, CREAM)
-	draw_string(ThemeDB.fallback_font, Vector2(58, 310), "SCORE  %06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 244, 15, Color("e2c98f"))
-	draw_string(ThemeDB.fallback_font, Vector2(58, 338), "LINES  %03d     LEVEL  %02d" % [lines, level], HORIZONTAL_ALIGNMENT_CENTER, 244, 12, Color("c8ad7f"))
-	draw_string(ThemeDB.fallback_font, Vector2(58, 372), "R OR ANY KEY TO RETRY", HORIZONTAL_ALIGNMENT_CENTER, 244, 10, Color("a99169"))
+	draw_string(ThemeDB.fallback_font, Vector2(58, 258), "GAME OVER", HORIZONTAL_ALIGNMENT_CENTER, 244, 28, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(58, 300), "SCORE  %06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 244, 15, Color("e2c98f"))
+	draw_string(ThemeDB.fallback_font, Vector2(58, 330), "LINES  %03d     LEVEL  %02d" % [lines, level], HORIZONTAL_ALIGNMENT_CENTER, 244, 12, Color("c8ad7f"))
+
+func draw_name_entry_overlay() -> void:
+	var rect := Rect2(46, 208, 268, 220)
+	draw_rect(rect, Color(0.06, 0.05, 0.04, 0.97))
+	draw_rect(rect, WOOD_LIGHT, false, 3.0)
+	draw_string(ThemeDB.fallback_font, Vector2(58, 258), "NEW HIGH SCORE", HORIZONTAL_ALIGNMENT_CENTER, 244, 24, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(58, 288), "%06d" % score, HORIZONTAL_ALIGNMENT_CENTER, 244, 18, Color("e2c98f"))
 
 func draw_hard_drop_fx() -> void:
 	var age := GameConfig.HARD_DROP_IMPACT_SECONDS - hard_drop_fx_timer
-	var trail_alpha := clampf(1.0 - age / GameConfig.HARD_DROP_TRAIL_SECONDS, 0.0, 1.0)
-	if trail_alpha > 0.0 and not hard_drop_landed_cells.is_empty():
-		draw_hard_drop_comet(trail_alpha)
 	var impact_progress := clampf(age / GameConfig.HARD_DROP_IMPACT_SECONDS, 0.0, 1.0)
 	var cell_size := float(GameConfig.CELL_SIZE)
 	var tile_width: float
@@ -873,12 +1583,14 @@ func draw_hard_drop_fx() -> void:
 		if cell.y < 0:
 			continue
 		var tile_pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
-		draw_rect(Rect2(tile_pos, Vector2(cell_size, cell_size)), Color("151719"))
+		draw_rect(Rect2(tile_pos, Vector2(cell_size, cell_size)), Color(0.08, 0.09, 0.10, 0.08))
 		var impact_rect := Rect2(tile_pos + Vector2((cell_size - tile_width) * 0.5, (cell_size - tile_height) * 0.5), Vector2(tile_width, tile_height))
 		if texture:
-			draw_texture_rect(texture, impact_rect, false)
+			draw_texture_rect(texture, impact_rect, false, Color(1.0, 0.96, 0.86, 0.60))
 		else:
-			draw_rect(impact_rect, GameConfig.COLORS[hard_drop_kind])
+			var impact_color: Color = GameConfig.COLORS[hard_drop_kind]
+			impact_color.a = 0.60
+			draw_rect(impact_rect, impact_color)
 	draw_hard_drop_pixel_shock(age)
 
 func draw_hard_drop_comet(alpha: float) -> void:
@@ -898,39 +1610,72 @@ func draw_hard_drop_comet(alpha: float) -> void:
 	var beam_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.72)
 	var beam_height := maxf(float(GameConfig.CELL_SIZE), beam_bottom - beam_top)
 	var piece_color: Color = GameConfig.COLORS[hard_drop_kind]
-	var row_count := maxi(6, ceili(beam_height / 5.0))
-	var column_count := maxi(4, ceili(footprint_width / 5.0))
-	for row in row_count:
-		var vertical_ratio := float(row) / maxf(1.0, float(row_count - 1))
+
+	# Layered tapered polygons form a continuous light column while preserving
+	# the board underneath through low alpha. The warm halo inherits the wood
+	# stain; the narrow cream core provides the magical beam-of-light read.
+	var halo := piece_color.lightened(0.38)
+	halo.a = alpha * 0.10
+	var halo_half_top := footprint_width * 0.34 + 11.0
+	var halo_half_bottom := footprint_width * 0.58 + 20.0
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(center_x - halo_half_top, beam_top),
+		Vector2(center_x + halo_half_top, beam_top),
+		Vector2(center_x + halo_half_bottom, beam_bottom),
+		Vector2(center_x - halo_half_bottom, beam_bottom),
+	]), halo)
+	var gold_half_top := footprint_width * 0.22 + 5.0
+	var gold_half_bottom := footprint_width * 0.40 + 9.0
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(center_x - gold_half_top, beam_top),
+		Vector2(center_x + gold_half_top, beam_top),
+		Vector2(center_x + gold_half_bottom, beam_bottom),
+		Vector2(center_x - gold_half_bottom, beam_bottom),
+	]), Color(1.0, 0.68, 0.25, alpha * 0.12))
+	var core_half_top := maxf(3.0, footprint_width * 0.07)
+	var core_half_bottom := maxf(6.0, footprint_width * 0.14)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(center_x - core_half_top, beam_top),
+		Vector2(center_x + core_half_top, beam_top),
+		Vector2(center_x + core_half_bottom, beam_bottom),
+		Vector2(center_x - core_half_bottom, beam_bottom),
+	]), Color(1.0, 0.97, 0.78, alpha * 0.25))
+
+	# Fine vertical shafts make the beam shimmer rather than reading as a flat
+	# translucent shape.
+	for streak in 9:
+		var ratio := (float(streak) + 0.5) / 9.0
+		var offset := (ratio - 0.5) * footprint_width * 0.82
+		var stagger := float((streak * 17) % 23)
+		var streak_alpha := alpha * (0.10 + (1.0 - absf(ratio - 0.5) * 2.0) * 0.16)
+		draw_line(
+			Vector2(round(center_x + offset * 0.55), beam_top + stagger),
+			Vector2(round(center_x + offset), beam_bottom - float((streak * 11) % 18)),
+			Color(1.0, 0.91, 0.60, streak_alpha),
+			2.0 if streak in [3, 4, 5] else 1.0
+		)
+
+	# Three translucent piece-shaped echoes show the actual fall inside the beam.
+	if hard_drop_start_cells.size() == hard_drop_landed_cells.size():
+		for echo in 3:
+			var travel := float(echo + 1) / 4.0
+			var echo_alpha := alpha * (0.09 + travel * 0.11)
+			for cell_index in hard_drop_start_cells.size():
+				var start_cell := Vector2(hard_drop_start_cells[cell_index])
+				var landed_cell := Vector2(hard_drop_landed_cells[cell_index])
+				var echo_cell := start_cell.lerp(landed_cell, travel)
+				var echo_pos := Vector2(GameConfig.BOARD_ORIGIN) + echo_cell * GameConfig.CELL_SIZE
+				draw_tile_at(echo_pos, hard_drop_kind, echo_alpha)
+
+	# Sparse star motes sit outside the core and keep the effect handcrafted.
+	var mote_count := maxi(6, ceili(beam_height / 34.0))
+	for mote in mote_count:
+		var vertical_ratio := (float(mote) + 0.5) / float(mote_count)
+		var side := -1.0 if mote % 2 == 0 else 1.0
+		var x := center_x + side * (footprint_width * 0.42 + float((mote * 13) % 17))
 		var y := beam_top + vertical_ratio * beam_height
-		var vertical_strength := lerpf(0.42, 1.0, vertical_ratio)
-		for column in column_count:
-			var x_ratio := (float(column) + 0.5) / float(column_count)
-			var core_strength := 1.0 - absf(x_ratio - 0.5) * 2.0
-			var pattern := (row * 37 + column * 61 + row * column * 3) % 100
-			var density := 58.0 + core_strength * 38.0
-			if pattern > density:
-				continue
-			var jitter_x := float(((row * 5 + column * 3) % 3) - 1)
-			var jitter_y := float(((row * 2 + column * 7) % 3) - 1)
-			var pixel_position := Vector2(
-				round(footprint_left + x_ratio * footprint_width + jitter_x),
-				round(y + jitter_y)
-			)
-			var pixel_alpha := alpha * vertical_strength * lerpf(0.62, 1.0, core_strength)
-			var color: Color
-			if core_strength > 0.68 and pattern % 4 != 0:
-				color = Color(1.0, 0.99, 0.90, pixel_alpha)
-			elif core_strength > 0.34:
-				color = Color(1.0, 0.88, 0.48, pixel_alpha)
-			else:
-				color = piece_color.lightened(0.42)
-				color.a = pixel_alpha * 0.88
-			var pixel_size := 4.0 if core_strength > 0.72 and pattern % 5 == 0 else 3.0
-			draw_rect(Rect2(pixel_position - Vector2(pixel_size * 0.5, pixel_size * 0.5), Vector2(pixel_size, pixel_size)), color)
-		if row % 8 == 2:
-			var star_offset := footprint_width * (0.28 if row % 16 == 2 else -0.28)
-			draw_pixel_star(Vector2(round(center_x + star_offset), round(y)), 3.0, Color(1.0, 0.96, 0.72, alpha * vertical_strength))
+		var radius := 2.0 + float(mote % 3)
+		draw_pixel_star(Vector2(round(x), round(y)), radius, Color(1.0, 0.94, 0.66, alpha * (0.25 + vertical_ratio * 0.32)))
 
 func draw_pixel_star(position: Vector2, radius: float, color: Color) -> void:
 	draw_rect(Rect2(position - Vector2.ONE, Vector2(3, 3)), color)
@@ -988,10 +1733,31 @@ func draw_line_clear_fx() -> void:
 			draw_texture_rect(line_clear_frames[frame_index], effect_rect, false, Color(1, 1, 1, 0.90))
 
 func draw_overlay(title: String, subtitle: String) -> void:
-	var rect := Rect2(38, 215, 284, 224) if subtitle == "" else Rect2(38, 250, 284, 112)
+	var rect := Rect2(38, 190, 284, 294) if subtitle == "" else Rect2(38, 250, 284, 112)
 	draw_rect(rect, Color(0.06,0.05,0.04,0.94))
 	draw_rect(rect, WOOD_LIGHT, false, 3.0)
-	var title_y := 276.0 if subtitle == "" else 296.0
+	var title_y := 250.0 if subtitle == "" else 296.0
 	draw_string(ThemeDB.fallback_font, Vector2(48, title_y), title, HORIZONTAL_ALIGNMENT_CENTER, 264, 26, CREAM)
 	if subtitle != "":
 		draw_string(ThemeDB.fallback_font, Vector2(48, 328), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 264, 12, Color("c8ad7f"))
+
+func draw_controls_screen() -> void:
+	var rect := CONTROLS_PANEL_RECT
+	draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color(0.015, 0.02, 0.04, 0.78))
+	draw_rect(rect, Color(0.055, 0.048, 0.042, 0.985))
+	draw_rect(rect, WOOD_LIGHT, false, 3.0)
+	draw_string(ThemeDB.fallback_font, Vector2(40, 112), "HOW TO PLAY", HORIZONTAL_ALIGNMENT_CENTER, 280, 26, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(40, 137), "TOUCH CONTROLS", HORIZONTAL_ALIGNMENT_CENTER, 280, 10, Color("c8ad7f"))
+	var rows := [
+		["TAP", "ROTATE"],
+		["SWIPE LEFT / RIGHT", "MOVE"],
+		["DRAG DOWN", "SOFT DROP"],
+		["QUICK SWIPE DOWN", "HARD DROP"],
+	]
+	for row_index in rows.size():
+		var row_y := 178.0 + row_index * 72.0
+		draw_rect(Rect2(42, row_y - 22, 276, 54), Color(0.10, 0.085, 0.068, 0.72))
+		draw_line(Vector2(48, row_y + 33), Vector2(312, row_y + 33), Color(0.66, 0.49, 0.29, 0.45), 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(52, row_y), rows[row_index][0], HORIZONTAL_ALIGNMENT_LEFT, 160, 12, Color(0.86, 0.78, 0.62))
+		draw_string(ThemeDB.fallback_font, Vector2(202, row_y), rows[row_index][1], HORIZONTAL_ALIGNMENT_RIGHT, 104, 14, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(42, 482), "PAUSE FOR RETRY OR LEVEL SELECT", HORIZONTAL_ALIGNMENT_CENTER, 276, 10, Color("c8ad7f"))

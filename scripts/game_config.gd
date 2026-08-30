@@ -21,9 +21,12 @@ const GRAVITY_FRAMES := [53, 49, 45, 41, 37, 33, 28, 22, 17, 11]
 const LINE_POINTS := [0, 40, 100, 300, 1200]
 
 const COLORS := {
-	"I": Color("42c7cc"), "O": Color("f1bd3b"), "T": Color("9b5aa5"),
-	"S": Color("72a947"), "Z": Color("db4d45"), "J": Color("447bb7"),
-	"L": Color("df7a32")
+	# Original wood-stain assignment: walnut, olive ash, maple, rosewood,
+	# smoked oak, cedar, and mahogany. This intentionally avoids the standard
+	# bright tetromino color mapping.
+	"I": Color("76543b"), "O": Color("7b7a43"), "T": Color("b6a077"),
+	"S": Color("76505a"), "Z": Color("62564d"), "J": Color("a56f2f"),
+	"L": Color("783f31")
 }
 
 static func gravity_seconds(level: int) -> float:

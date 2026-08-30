@@ -12,6 +12,120 @@ func run_test() -> void:
 		push_error("Game should begin on the title screen")
 		quit(1)
 		return
+	if game.controls_visible:
+		push_error("The automatic controls screen must wait for the first gameplay board")
+		quit(1)
+		return
+	if game.scores_button.visible:
+		push_error("High Scores must not cover the title screen")
+		quit(1)
+		return
+	game.controls_visible = true
+	game.update_menu_controls()
+	if not game.controls_close_button.visible or game.controls_button.visible or game.music_button.visible:
+		push_error("The first-time controls screen must behave as a modal")
+		quit(1)
+		return
+	var controls_confirm := InputEventKey.new()
+	controls_confirm.physical_keycode = KEY_ENTER
+	controls_confirm.pressed = true
+	game._input(controls_confirm)
+	if game.controls_visible or game.controls_button.visible:
+		push_error("Confirm must dismiss the controls screen without adding it to the title")
+		quit(1)
+		return
+	if game.audio.MIX_RATE != 48000:
+		push_error("Synthesized effects must match the 48 kHz mobile mixer")
+		quit(1)
+		return
+	var has_master_limiter := false
+	var master_bus := AudioServer.get_bus_index("Master")
+	for effect_index in AudioServer.get_bus_effect_count(master_bus):
+		if AudioServer.get_bus_effect(master_bus, effect_index) is AudioEffectLimiter:
+			has_master_limiter = true
+	if not has_master_limiter:
+		push_error("The mobile mix must protect simultaneous music and effects with a limiter")
+		quit(1)
+		return
+	for effect_id in ["rotate", "invalid", "soft_drop", "lock", "hard_drop", "double_clear", "triple_clear", "level_up", "ui_select", "ui_confirm", "ui_cancel", "pause", "resume", "game_over", "high_score", "name_saved"]:
+		if not game.audio.synth_effects.has(effect_id):
+			push_error("Missing synthesized sound effect: %s" % effect_id)
+			quit(1)
+			return
+	if not ResourceLoader.exists(game.audio.ENDING_MUSIC_PATH):
+		push_error("Missing Stargazer ending music")
+		quit(1)
+		return
+	if not ResourceLoader.exists("res://assets/endings/stargazer/cat_sheet_aligned.png"):
+		push_error("Missing aligned Stargazer cat animation")
+		quit(1)
+		return
+	if not ResourceLoader.exists("res://assets/cat/golden_01.png"):
+		push_error("Missing golden Tetris cat")
+		quit(1)
+		return
+	if not ResourceLoader.exists("res://assets/endings/lantern.png"):
+		push_error("Missing Lantern ending sprite")
+		quit(1)
+		return
+	game.score = game.LANTERN_ENDING_SCORE - 1
+	if game.ending_name() != "STARGAZER":
+		push_error("Scores below the Lantern threshold must receive Stargazer")
+		quit(1)
+		return
+	game.score = game.LANTERN_ENDING_SCORE
+	if game.ending_name() != "LANTERN":
+		push_error("Scores at the Lantern threshold must receive Lantern")
+		quit(1)
+		return
+	game.score = 0
+	game.state = game.State.TITLE
+	game.open_ending_preview(true)
+	if game.state != game.State.ENDING or not game.ending_preview_mode or game.ending_name() != "LANTERN":
+		push_error("The debug Lantern preview must open without playing for a score")
+		quit(1)
+		return
+	game.complete_ending()
+	if game.state != game.State.TITLE or game.ending_preview_mode or game.score != 0:
+		push_error("Ending preview must return to its menu without submitting or retaining a preview score")
+		quit(1)
+		return
+	var stargazer_preview_key := InputEventKey.new()
+	stargazer_preview_key.physical_keycode = KEY_7
+	stargazer_preview_key.pressed = true
+	game._input(stargazer_preview_key)
+	if game.state != game.State.ENDING or game.ending_name() != "STARGAZER":
+		push_error("7 must open the Stargazer preview when running from the editor")
+		quit(1)
+		return
+	game.complete_ending()
+	var lantern_preview_key := InputEventKey.new()
+	lantern_preview_key.physical_keycode = KEY_8
+	lantern_preview_key.pressed = true
+	game._input(lantern_preview_key)
+	if game.state != game.State.ENDING or game.ending_name() != "LANTERN":
+		push_error("8 must open the Lantern preview when running from the editor")
+		quit(1)
+		return
+	game.complete_ending()
+	var unrelated_key := InputEventKey.new()
+	unrelated_key.physical_keycode = KEY_F2
+	unrelated_key.pressed = true
+	game._input(unrelated_key)
+	if game.state != game.State.TITLE:
+		push_error("Unrelated Android hardware keys must not act as Start")
+		quit(1)
+		return
+	var music_touch := InputEventScreenTouch.new()
+	music_touch.index = 0
+	music_touch.position = Vector2(300, 28)
+	music_touch.pressed = true
+	game._input(music_touch)
+	if game.state != game.State.TITLE:
+		push_error("Touching the title music control must not act as Start")
+		quit(1)
+		return
+	game.last_touch_event_msec = -1000000
 	var title_start := InputEventKey.new()
 	title_start.physical_keycode = KEY_SPACE
 	title_start.pressed = true
@@ -19,6 +133,20 @@ func run_test() -> void:
 	await process_frame
 	if game.state != game.State.LEVEL_SELECT:
 		push_error("The title Start action should open level selection")
+		quit(1)
+		return
+	if not game.scores_button.visible or game.scores_button.position != Vector2(115, 324):
+		push_error("Level selection must expose High Scores above the level panel")
+		quit(1)
+		return
+	game.show_high_scores()
+	if game.state != game.State.HIGH_SCORES or game.high_scores_return_state != game.State.LEVEL_SELECT:
+		push_error("High Scores opened from level selection must remember its return screen")
+		quit(1)
+		return
+	game.secondary_menu_action()
+	if game.state != game.State.LEVEL_SELECT:
+		push_error("Back from High Scores must return to level selection")
 		quit(1)
 		return
 	var down := InputEventKey.new()
@@ -53,29 +181,188 @@ func run_test() -> void:
 		push_error("Line-clear debug slider value should update runtime timing")
 		quit(1)
 		return
+	game.first_gameplay_controls_pending = true
 	var event := InputEventKey.new()
 	event.physical_keycode = KEY_SPACE
 	event.pressed = true
 	Input.parse_input_event(event)
 	await process_frame
-	if game.state != game.State.PLAYING:
-		push_error("Space should start the game")
+	if game.state != game.State.PAUSED or not game.controls_visible or not game.controls_resume_gameplay:
+		push_error("The first Start Game must show controls over a paused gameplay board")
+		quit(1)
+		return
+	game.close_controls_screen()
+	if game.state != game.State.PLAYING or game.controls_visible or game.first_gameplay_controls_pending:
+		push_error("Dismissing first-game controls must resume the same game")
 		quit(1)
 		return
 	if game.level != 5:
-		push_error("Selected debug level should become the starting level")
+		push_error("Selected level should become the starting level")
 		quit(1)
 		return
+	game.handle_android_back()
+	if game.state != game.State.PAUSED:
+		push_error("Android Back during gameplay must pause instead of closing")
+		quit(1)
+		return
+	game.handle_android_back()
+	if game.state != game.State.PLAYING:
+		push_error("Android Back from pause must resume gameplay")
+		quit(1)
+		return
+	var pause_touch := InputEventScreenTouch.new()
+	pause_touch.index = 0
+	pause_touch.position = Vector2(25, 18)
+	pause_touch.pressed = true
+	var rotation_before_pause: int = game.active.rotation
+	game._input(pause_touch)
+	if game.state != game.State.PLAYING or game.active.rotation != rotation_before_pause:
+		push_error("The gameplay Pause control must not leak its touch to piece controls")
+		quit(1)
+		return
+	game.toggle_pause()
+	await process_frame
+	if game.state != game.State.PAUSED or not game.start_button.visible or not game.retry_button.visible or not game.back_button.visible or not game.controls_button.visible:
+		push_error("Pause must show Resume, Retry, Level Select, and How To Play actions")
+		quit(1)
+		return
+	game.primary_menu_action()
+	if game.state != game.State.PLAYING:
+		push_error("Resume must return to active play")
+		quit(1)
+		return
+	game.toggle_pause()
+	game.secondary_menu_action()
+	if game.state != game.State.LEVEL_SELECT:
+		push_error("Level Select from pause must return to level selection")
+		quit(1)
+		return
+	game.start_game()
+	# Integration check for the complete Tetris transaction: lock, pause, remove,
+	# compact, score, then spawn. No next piece may appear in the middle.
+	game.board.clear()
+	for y in range(16, 20):
+		for x in GameConfig.BOARD_SIZE.x:
+			if x != 5:
+				game.board.cells[y][x] = "J"
+	game.board.cells[15][0] = "T"
+	game.active = Tetromino.new("I")
+	game.active.rotation = 1
+	game.active.position = Vector2i(3, 16)
+	var tetris_piece = game.active
+	game.lock_piece(false)
+	if game.state != game.State.CLEARING or game.clearing_rows != [16, 17, 18, 19] or game.active != tetris_piece:
+		push_error("A Tetris must hold the locked piece and defer spawning until all four rows resolve")
+		quit(1)
+		return
+	if game.lock_flash_timer <= 0.0 or game.lock_flash_is_hard:
+		push_error("A normal lock must start the restrained landing flash")
+		quit(1)
+		return
+	game.handle_android_back()
+	if not game.pause_after_clear:
+		push_error("Android Back during a line-clear animation must queue pause")
+		quit(1)
+		return
+	game.finish_line_clear()
+	if game.state != game.State.PAUSED or game.lines != 4 or game.score != 1200 * (game.start_level + 1):
+		push_error("A Tetris must remove four rows and apply its score exactly once before play resumes")
+		quit(1)
+		return
+	game.toggle_pause()
+	if game.cat_crowd_count() != 1 or game.golden_cat_count() != 1 or game.cat_crowd_jump_timer <= 0.0:
+		push_error("A Tetris must add one golden cat instead of four ordinary cats and make the crowd jump")
+		quit(1)
+		return
+	if not game.board.full_rows().is_empty() or game.board.cells[19][0] != "T" or game.active == tetris_piece:
+		push_error("Tetris compaction must preserve surviving blocks and spawn the next piece afterward")
+		quit(1)
+		return
+	game.retry_game()
 	game.hard_drop()
+	await process_frame
 	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != 4 or game.hard_drop_shock_pixels.size() != 24:
 		push_error("Hard drop should begin the visual trail and impact overlay")
 		quit(1)
 		return
+	if game.lock_flash_timer <= 0.0 or not game.lock_flash_is_hard or game.lock_flash_duration != game.HARD_LOCK_FLASH_SECONDS:
+		push_error("Hard drop must start the stronger multi-pulse lock flash")
+		quit(1)
+		return
 	game.retry_game()
-	if game.state != game.State.PLAYING or game.score != 0 or game.lines != 0 or game.level != 5:
+	if game.state != game.State.PLAYING or game.score != 0 or game.lines != 0 or game.level != 5 or game.cat_crowd_count() != 0 or game.golden_cat_count() != 0:
 		push_error("Retry should immediately reset the current run at the selected starting level")
 		quit(1)
 		return
+	game.score = 4321
+	game.high_scores.clear()
+	for high_score_rank in SaveSystem.MAX_HIGH_SCORES:
+		game.high_scores.append({"name": "CAT", "score": 999999 - high_score_rank, "level": 9, "lines": 99})
+	game.finish_run()
+	if game.state != game.State.ENDING or not is_zero_approx(game.ending_timer) or game.audio.current_music != "ending":
+		push_error("Top-out should enter the Stargazer ending before any result menu")
+		quit(1)
+		return
+	game._process(60.0)
+	if game.state != game.State.ENDING:
+		push_error("The Stargazer ending must remain open until the player continues")
+		quit(1)
+		return
+	var ending_confirm := InputEventKey.new()
+	ending_confirm.physical_keycode = KEY_ENTER
+	ending_confirm.pressed = true
+	game.ending_timer = game.ENDING_SKIP_DELAY - 0.1
+	game._input(ending_confirm)
+	if game.state != game.State.ENDING:
+		push_error("The ending must ignore accidental skip input during its opening fade")
+		quit(1)
+		return
+	game.ending_timer = game.ENDING_SKIP_DELAY
+	game._input(ending_confirm)
+	if game.state != game.State.GAME_OVER or game.audio.current_music != "":
+		push_error("A non-qualifying score should continue from the ending to Game Over")
+		quit(1)
+		return
+	game.retry_game()
+	# Android may deliver a release or begin the next hold while the line-clear
+	# animation owns the game state. Neither case may poison the next piece.
+	game.state = game.State.CLEARING
+	game.touch_active = true
+	game.touch_index = 0
+	game.touch_gesture = game.TouchGesture.VERTICAL
+	var clear_release := InputEventScreenTouch.new()
+	clear_release.index = 0
+	clear_release.position = Vector2(180, 300)
+	clear_release.pressed = false
+	game._input(clear_release)
+	if game.touch_active:
+		push_error("A finger released during a line clear must not remain latched")
+		quit(1)
+		return
+	var clear_press := InputEventScreenTouch.new()
+	clear_press.index = 0
+	clear_press.position = Vector2(180, 300)
+	clear_press.pressed = true
+	game._input(clear_press)
+	var clear_drag := InputEventScreenDrag.new()
+	clear_drag.index = 0
+	clear_drag.position = Vector2(190, 300)
+	game._input(clear_drag)
+	game.state = game.State.PLAYING
+	var post_clear_x: int = game.active.position.x
+	var post_clear_drag := InputEventScreenDrag.new()
+	post_clear_drag.index = 0
+	post_clear_drag.position = Vector2(216, 300)
+	game._input(post_clear_drag)
+	if game.active.position.x != post_clear_x + 1:
+		push_error("A hold begun during line clear must move the next piece without another lift")
+		quit(1)
+		return
+	var post_clear_release := InputEventScreenTouch.new()
+	post_clear_release.index = 0
+	post_clear_release.position = Vector2(216, 300)
+	post_clear_release.pressed = false
+	game._input(post_clear_release)
 	# Android can synthesize a mouse click immediately after a touch. A single
 	# tap must still rotate exactly once.
 	game.active = Tetromino.new("T")

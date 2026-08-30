@@ -43,11 +43,28 @@ func is_row_full(y: int) -> bool:
 	return true
 
 func remove_rows(rows: Array[int]) -> void:
-	rows.sort()
-	rows.reverse()
+	# Compact once, after deciding which original rows survive. Inserting a new
+	# top row between removals shifts every remaining index and corrupts multi-
+	# line clears (especially a four-line Tetris).
+	var rows_to_remove := {}
 	for y in rows:
-		cells.remove_at(y)
+		if y >= 0 and y < GameConfig.BOARD_SIZE.y:
+			rows_to_remove[y] = true
+	var survivors: Array = []
+	for y in GameConfig.BOARD_SIZE.y:
+		if not rows_to_remove.has(y):
+			survivors.append(cells[y])
+	while survivors.size() < GameConfig.BOARD_SIZE.y:
 		var empty: Array[String] = []
 		for x in GameConfig.BOARD_SIZE.x:
 			empty.append("")
-		cells.push_front(empty)
+		survivors.push_front(empty)
+	cells = survivors
+
+func has_valid_dimensions() -> bool:
+	if cells.size() != GameConfig.BOARD_SIZE.y:
+		return false
+	for row in cells:
+		if row.size() != GameConfig.BOARD_SIZE.x:
+			return false
+	return true

@@ -1,4 +1,10 @@
 .godot/
 *.tmp
+.tmp/
 export/
+web/
+.vercel/
 tests/output/
+*.keystore
+*.jks
+*.p12

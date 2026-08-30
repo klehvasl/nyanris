@@ -10,9 +10,11 @@ config_version=5
 
 [application]
 
-config/name="Cozy Cat Blocks"
+config/name="Nyanris"
 run/main_scene="res://main.tscn"
+config/icon="res://assets/release/nyanris_pwa_icon_512.png"
 config/features=PackedStringArray("4.7")
+config/quit_on_go_back=false
 
 [display]
 
@@ -24,9 +26,15 @@ window/stretch/mode="canvas_items"
 window/stretch/scale_mode="integer"
 window/handheld/orientation=1
 
+[audio]
+
+driver/mix_rate=48000
+driver/output_latency=30
+
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.08, 0.065, 0.05, 1)

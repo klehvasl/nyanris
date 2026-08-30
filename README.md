@@ -1,14 +1,24 @@
-# Cozy Cat Blocks
+# Nyanris
 
-A portrait, mobile-first falling-block MVP for Godot 4. The game uses original cozy-cat artwork supplied with the project and intentionally conservative late-1980s handheld-style rules.
+A portrait, mobile-first falling-block puzzle game for Godot 4.7. It combines classic line-clearing rules with a growing crowd of cats, wooden pixel-art presentation, local high scores, and score-based Stargazer and Lantern endings.
+
+Play the installable Web version at [nyanris.vercel.app](https://nyanris.vercel.app).
 
 ## Run
 
-1. Open `project.godot` in Godot 4.2 or newer.
+1. Open `project.godot` in Godot 4.7.2 or newer.
 2. Run the main scene (F6) or project (F5).
-3. Use arrows/A/D, Down/S, X/Up, Space, and P/Escape. Press R to retry and M to toggle music. Touch or click the controls drawn at the bottom; clicking the playfield rotates.
+3. Use arrows/A/D, Down/S, X/Up, Space, and P/Escape. Press R to retry and M to toggle music. Tap the playfield to rotate, swipe sideways to move, and swipe down to drop. The in-game Pause button opens Resume, Retry, and Level Select actions.
 
-Press Start on the title screen to open the room-background, touch-friendly starting-level grid. Left/Right moves across levels, Up/Down moves between rows, and Enter/Space confirms. F1 reveals the temporary line-clear timing tuner while choosing a level.
+Press Start on the title screen to open the touch-friendly starting-level grid. Left/Right moves across levels, Up/Down moves between rows, and Enter/Space confirms. Named top-ten scores are saved locally and can be viewed from level selection or the game-over screen.
+
+In debug builds, press 7 to preview Stargazer or 8 to preview Lantern from a menu. Preview endings return to that menu and never submit their temporary score. Godot reserves F7/F8 while running from the editor.
+
+## Export
+
+- Android: use the separate `Android Debug` export preset for device testing.
+- Web PWA: run `tools/export_web_pwa.ps1`, then `tools/serve_web_pwa.ps1` for local testing.
+- The generated `export/` and `web/` directories are intentionally excluded from Git. Distributable Android builds belong in GitHub Releases, while the PWA is deployed separately to Vercel.
 
 ## Version checkpoints
 
