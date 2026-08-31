@@ -73,6 +73,8 @@ var touch_last := Vector2.ZERO
 var touch_active := false
 var touch_index := -1
 var last_touch_event_msec := -1000000
+var level_select_pointer_guard := false
+var level_select_guard_from_touch := false
 var touch_press_msec := 0
 var touch_gesture := TouchGesture.PENDING
 var touch_drag_remainder := Vector2.ZERO
@@ -590,6 +592,7 @@ func _input(event: InputEvent) -> void:
 	# synthetic mouse click immediately afterward, including across menus.
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		last_touch_event_msec = Time.get_ticks_msec()
+	update_level_select_pointer_guard(event)
 	if controls_visible:
 		if is_confirm_input(event) \
 			or (event is InputEventScreenTouch and event.pressed) \
@@ -622,6 +625,8 @@ func _input(event: InputEvent) -> void:
 	if state == State.TITLE:
 		if is_title_start_input(event):
 			open_level_select()
+			if event is InputEventScreenTouch or event is InputEventMouseButton:
+				arm_level_select_pointer_guard(event is InputEventScreenTouch)
 			get_viewport().set_input_as_handled()
 		return
 	if state in [State.LEVEL_SELECT, State.GAME_OVER]:
@@ -782,7 +787,30 @@ func primary_menu_action() -> void:
 	elif state == State.PAUSED:
 		toggle_pause()
 	elif state in [State.LEVEL_SELECT, State.GAME_OVER]:
+		if state == State.LEVEL_SELECT and level_select_pointer_guard:
+			return
 		start_game()
+
+func arm_level_select_pointer_guard(from_touch: bool) -> void:
+	# PRESS START overlaps the level-select START GAME button. Keep the pointer
+	# sequence that opened this screen from activating the newly visible button.
+	level_select_pointer_guard = true
+	level_select_guard_from_touch = from_touch
+
+func update_level_select_pointer_guard(event: InputEvent) -> void:
+	if not level_select_pointer_guard or state != State.LEVEL_SELECT:
+		return
+	if event is InputEventScreenTouch and event.pressed:
+		# A later touch press is a new, deliberate level-select interaction.
+		level_select_pointer_guard = false
+		level_select_guard_from_touch = false
+	elif event is InputEventMouseButton and event.pressed and not level_select_guard_from_touch:
+		# Likewise for a mouse-opened transition. Touch-generated mouse input stays
+		# guarded because browsers may synthesize it after the touch release.
+		level_select_pointer_guard = false
+	elif is_confirm_input(event):
+		level_select_pointer_guard = false
+		level_select_guard_from_touch = false
 
 func open_level_select(force := false) -> void:
 	if state != State.TITLE and not force:

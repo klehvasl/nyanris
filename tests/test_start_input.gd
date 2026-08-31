@@ -125,6 +125,43 @@ func run_test() -> void:
 		push_error("Touching the title music control must not act as Start")
 		quit(1)
 		return
+	# On Web, PRESS START overlaps the START GAME control that appears on level
+	# select. The opening touch and its synthetic mouse event must not leak into it.
+	var title_touch := InputEventScreenTouch.new()
+	title_touch.index = 0
+	title_touch.position = Vector2(180, 558)
+	title_touch.pressed = true
+	game._input(title_touch)
+	if game.state != game.State.LEVEL_SELECT or not game.level_select_pointer_guard:
+		push_error("A title touch must show level select with its opening pointer guarded")
+		quit(1)
+		return
+	game.primary_menu_action()
+	if game.state != game.State.LEVEL_SELECT:
+		push_error("The pointer that opened level select must not immediately start level 0")
+		quit(1)
+		return
+	var title_synthetic_mouse := InputEventMouseButton.new()
+	title_synthetic_mouse.position = title_touch.position
+	title_synthetic_mouse.button_index = MOUSE_BUTTON_LEFT
+	title_synthetic_mouse.pressed = true
+	game._input(title_synthetic_mouse)
+	game.primary_menu_action()
+	if game.state != game.State.LEVEL_SELECT:
+		push_error("The title touch's synthetic mouse click must not skip level select")
+		quit(1)
+		return
+	var deliberate_level_touch := InputEventScreenTouch.new()
+	deliberate_level_touch.index = 0
+	deliberate_level_touch.position = Vector2(180, 558)
+	deliberate_level_touch.pressed = true
+	game._input(deliberate_level_touch)
+	if game.level_select_pointer_guard:
+		push_error("The next deliberate touch must immediately arm level-select controls")
+		quit(1)
+		return
+	game.state = game.State.TITLE
+	game.update_menu_controls()
 	game.last_touch_event_msec = -1000000
 	var title_start := InputEventKey.new()
 	title_start.physical_keycode = KEY_SPACE
