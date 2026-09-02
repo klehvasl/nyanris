@@ -5,7 +5,7 @@ const LOGICAL_SIZE := Vector2i(360, 640)
 const BOARD_SIZE := Vector2i(14, 24)
 const CELL_SIZE := 20
 const BOARD_ORIGIN := Vector2i(40, 112)
-const PIECE_KINDS := ["BAR", "BLOCK", "L", "J", "T", "S", "Z", "Y", "STAIRS", "C", "F", "FORK"]
+const PIECE_KINDS := ["I", "J", "L", "O", "S", "T", "Z"]
 const LINE_CLEAR_SECONDS := 0.35
 const LOCK_DELAY_SECONDS := 0.35
 const MAX_LEVEL := 9
@@ -21,19 +21,16 @@ const GRAVITY_FRAMES := [53, 49, 45, 41, 37, 33, 28, 22, 17, 11]
 const LINE_POINTS := [0, 40, 100, 300, 700, 1500, 3000]
 
 const COLORS := {
-	# Twelve related wood stains give the larger pieces identity without using
-	# the familiar bright tetromino palette.
-	"BAR": Color("76543b"), "BLOCK": Color("7b7a43"), "T": Color("b6a077"),
+	# The seven familiar families keep the established wood stains rather than
+	# using the official bright tetromino palette.
+	"I": Color("76543b"), "O": Color("7b7a43"), "T": Color("b6a077"),
 	"S": Color("76505a"), "Z": Color("62564d"), "J": Color("a56f2f"),
-	"L": Color("783f31"), "Y": Color("8b6846"), "STAIRS": Color("6f7044"),
-	"C": Color("9a7756"), "F": Color("684957"), "FORK": Color("8c573d")
+	"L": Color("783f31")
 }
 
-# The existing seven carved tiles remain the visual material library. New
-# hexomino families reuse those stains while their silhouettes carry identity.
+# The original carved tiles already provide exactly these seven material families.
 const TILE_SOURCE_KIND := {
-	"BAR": "I", "BLOCK": "O", "T": "T", "S": "S", "Z": "Z", "J": "J",
-	"L": "L", "Y": "I", "STAIRS": "S", "C": "O", "F": "T", "FORK": "L"
+	"I": "I", "J": "J", "L": "L", "O": "O", "S": "S", "T": "T", "Z": "Z"
 }
 
 static func gravity_seconds(level: int) -> float:

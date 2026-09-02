@@ -1,21 +1,16 @@
 class_name Hexomino
 extends RefCounted
 
-# One canonical orientation for each curated six-cell piece. Rotations are
-# generated and normalized once, which keeps every footprint auditable here.
+# The seven tetromino families extended to six cells. Rotations are generated
+# and normalized once, which keeps every footprint auditable here.
 const BASE_SHAPES := {
-	"BAR": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(4,0), Vector2i(5,0)],
-	"BLOCK": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
-	"L": [Vector2i(0,0), Vector2i(0,1), Vector2i(0,2), Vector2i(1,2), Vector2i(2,2), Vector2i(3,2)],
-	"J": [Vector2i(3,0), Vector2i(3,1), Vector2i(0,2), Vector2i(1,2), Vector2i(2,2), Vector2i(3,2)],
-	"T": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(1,1), Vector2i(2,1)],
+	"I": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(4,0), Vector2i(5,0)],
+	"J": [Vector2i(2,0), Vector2i(2,1), Vector2i(2,2), Vector2i(0,3), Vector2i(1,3), Vector2i(2,3)],
+	"L": [Vector2i(0,0), Vector2i(0,1), Vector2i(0,2), Vector2i(0,3), Vector2i(1,3), Vector2i(2,3)],
+	"O": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
 	"S": [Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
+	"T": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1), Vector2i(1,2), Vector2i(1,3)],
 	"Z": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1), Vector2i(2,1), Vector2i(3,1)],
-	"Y": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(4,0), Vector2i(1,1)],
-	"STAIRS": [Vector2i(0,0), Vector2i(1,0), Vector2i(1,1), Vector2i(2,1), Vector2i(2,2), Vector2i(3,2)],
-	"C": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(0,2), Vector2i(1,2)],
-	"F": [Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,2), Vector2i(1,3)],
-	"FORK": [Vector2i(0,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1), Vector2i(1,2)]
 }
 
 static var _rotation_cache: Dictionary = {}

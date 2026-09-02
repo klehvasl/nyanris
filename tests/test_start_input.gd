@@ -284,7 +284,7 @@ func run_test() -> void:
 			if x != 6:
 				game.board.cells[y][x] = "J"
 	game.board.cells[first_clear_row - 1][0] = "T"
-	game.active = Hexomino.new("BAR")
+	game.active = Hexomino.new("I")
 	game.active.rotation = 1
 	game.active.position = Vector2i(6, first_clear_row)
 	var six_line_piece = game.active

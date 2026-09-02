@@ -12,7 +12,7 @@ This branch preserves the released four-block version on `master` and changes on
 
 ## Rules and feel
 
-- Twelve curated hexomino geometries: BAR, BLOCK, L, J, T, S, Z, Y, STAIRS, C, F, and FORK. Every bag contains each six-cell shape exactly once, is shuffled with Fisher-Yates, and is fully dealt before the next bag is created.
+- Seven six-cell extensions of the familiar I/J/L/O/S/T/Z families. Every bag contains each shape exactly once, is shuffled with Fisher-Yates, and is fully dealt before the next bag is created.
 - One next-piece preview, no hold, no combos or back-to-back bonuses.
 - Clockwise rotation only. Rotations test horizontal kicks at 0, −1, +1, −2, +2 cells.
 - Ghost piece enabled. Held soft drop advances one row every 75 ms and scores 1 point per cell; it uses an independent timer so gravity backlog cannot cause a sudden drop. Hard drop scores 2 per cell.

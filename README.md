@@ -1,6 +1,6 @@
 # Nyanris Six
 
-An experimental branch of Nyanris built around twelve six-cell hexominoes on a 14×24 board. The released four-block game remains preserved on `master`; this branch has a separate app name, package ID, and local save directory.
+An experimental branch of Nyanris built around seven familiar six-cell pieces on a 14×24 board. The released four-block game remains preserved on `master`; this branch has a separate app name, package ID, and local save directory.
 
 The published Web version remains the original game until this branch is ready for separate deployment.
 
