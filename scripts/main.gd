@@ -15,7 +15,7 @@ const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 1500
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
 const TOUCH_TAP_MAX_PIXELS := 5.0
-const TOUCH_HORIZONTAL_STEP_PIXELS := 20.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 22.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_AXIS_CHANGE_PIXELS := 18.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
@@ -50,7 +50,7 @@ const CAT_CROWD_MIN := Vector2(324, 116)
 const CAT_CROWD_MAX := Vector2(334, 594)
 
 var board := GameBoard.new()
-var active: Hexomino
+var active: Polyomino
 var next_kind := ""
 var state := State.TITLE
 var score := 0
@@ -1047,7 +1047,7 @@ func retry_game() -> void:
 	start_game()
 
 func spawn_piece() -> void:
-	active = Hexomino.new(next_kind)
+	active = Polyomino.new(next_kind)
 	next_kind = piece_randomizer.next_piece()
 	gravity_accumulator = 0.0
 	soft_drop_accumulator = 0.0
@@ -1116,7 +1116,7 @@ func try_move(offset: Vector2i) -> bool:
 	return false
 
 func try_rotate() -> void:
-	var target_rotation := (active.rotation + 1) % Hexomino.rotation_count(active.kind)
+	var target_rotation := (active.rotation + 1) % Polyomino.rotation_count(active.kind)
 	for kick in [0, -1, 1, -2, 2]:
 		var target := active.position + Vector2i(kick, 0)
 		if board.fits(active, target, target_rotation):
@@ -1205,14 +1205,14 @@ func finish_line_clear() -> void:
 	var previous_level := level
 	score += GameConfig.LINE_POINTS[count] * (level + 1)
 	lines += count
-	if count == 6:
+	if count == 5:
 		add_crowd_cats(1, true)
 	else:
 		add_crowd_cats(count)
 	level = mini(start_level + floori(lines / 10.0), GameConfig.MAX_LEVEL)
 	if level > previous_level:
 		audio.play_level_up()
-	if count == 6:
+	if count == 5:
 		cat_happy_timer = 1.5
 		cat_crowd_jump_timer = CAT_CROWD_JUMP_SECONDS
 	clearing_rows.clear()
@@ -1298,7 +1298,7 @@ func _draw() -> void:
 	if board_frame:
 		# Stretch the existing wooden frame around the wider 14x24 opening. The
 		# texture is decorative, so this avoids temporary replacement art.
-		draw_texture_rect(board_frame, Rect2(-38, -33, 416, 753), false)
+		draw_texture_rect(board_frame, Rect2(-24, -33, 384, 753), false)
 	var board_rect := Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE)
 	draw_rect(board_rect, Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
@@ -1331,7 +1331,7 @@ func _draw() -> void:
 	draw_panel(Rect2(154, 4, 98, 47), "LEVEL", "%02d" % level)
 	draw_panel(Rect2(54, 55, 98, 47), "LINES", "%03d" % lines)
 	if next_kind != "":
-		var preview := Hexomino.new(next_kind)
+		var preview := Polyomino.new(next_kind)
 		var preview_cells := preview.cells(Vector2i.ZERO, 0)
 		var min_cell := Vector2i(99, 99)
 		var max_cell := Vector2i(-99, -99)
@@ -1394,7 +1394,7 @@ func draw_cat_crowd() -> void:
 		draw_texture_rect(cat_texture, Rect2(position, CAT_CROWD_SIZE), false)
 	if not golden_cat_texture:
 		return
-	# Golden six-line cats render last so their reward glow is never buried by the
+	# Golden five-line cats render last so their reward glow is never buried by the
 	# ordinary crowd. The aura stays outside the playfield boundary.
 	for cat_index in range(cat_crowd_count() - 1, -1, -1):
 		if not cat_crowd_golden[cat_index]:

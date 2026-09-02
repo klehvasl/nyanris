@@ -4,6 +4,7 @@
 export/
 web/
 web-six/
+web-mix/
 .vercel/
 tests/output/
 *.keystore

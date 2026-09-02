@@ -14,7 +14,7 @@ func clear() -> void:
 			row.append("")
 		cells.append(row)
 
-func fits(piece: Hexomino, at_position: Vector2i, at_rotation: int) -> bool:
+func fits(piece: Polyomino, at_position: Vector2i, at_rotation: int) -> bool:
 	for cell: Vector2i in piece.cells(at_position, at_rotation):
 		if cell.x < 0 or cell.x >= GameConfig.BOARD_SIZE.x or cell.y >= GameConfig.BOARD_SIZE.y:
 			return false
@@ -22,7 +22,7 @@ func fits(piece: Hexomino, at_position: Vector2i, at_rotation: int) -> bool:
 			return false
 	return true
 
-func place(piece: Hexomino) -> void:
+func place(piece: Polyomino) -> void:
 	for cell: Vector2i in piece.cells():
 		if cell.y >= 0:
 			cells[cell.y][cell.x] = piece.kind
@@ -45,7 +45,7 @@ func is_row_full(y: int) -> bool:
 func remove_rows(rows: Array[int]) -> void:
 	# Compact once, after deciding which original rows survive. Inserting a new
 	# top row between removals shifts every remaining index and corrupts multi-
-	# line clears (especially the six-line signature clear).
+	# line clears (especially the five-line signature clear).
 	var rows_to_remove := {}
 	for y in rows:
 		if y >= 0 and y < GameConfig.BOARD_SIZE.y:

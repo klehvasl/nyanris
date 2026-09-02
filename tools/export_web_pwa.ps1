@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$outputDirectory = Join-Path $projectRoot "web-six"
+$outputDirectory = Join-Path $projectRoot "web-mix"
 $outputFile = Join-Path $outputDirectory "index.html"
 
 if (-not (Test-Path -LiteralPath $GodotPath)) {
@@ -18,4 +18,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "Godot Web PWA export failed with exit code $LASTEXITCODE."
 }
 
-Write-Output "Nyanris Six PWA exported to: $outputDirectory"
+Write-Output "Nyanris Mix PWA exported to: $outputDirectory"

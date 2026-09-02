@@ -61,7 +61,7 @@ func run_test() -> void:
 		quit(1)
 		return
 	if not ResourceLoader.exists("res://assets/cat/golden_01.png"):
-		push_error("Missing golden six-line cat")
+		push_error("Missing golden five-line cat")
 		quit(1)
 		return
 	if not ResourceLoader.exists("res://assets/endings/lantern.png"):
@@ -275,22 +275,22 @@ func run_test() -> void:
 		quit(1)
 		return
 	game.start_game()
-	# Integration check for the complete six-line transaction: lock, pause, remove,
+	# Integration check for the complete five-line transaction: lock, pause, remove,
 	# compact, score, then spawn. No next piece may appear in the middle.
 	game.board.clear()
-	var first_clear_row := GameConfig.BOARD_SIZE.y - 6
+	var first_clear_row := GameConfig.BOARD_SIZE.y - 5
 	for y in range(first_clear_row, GameConfig.BOARD_SIZE.y):
 		for x in GameConfig.BOARD_SIZE.x:
 			if x != 6:
 				game.board.cells[y][x] = "J"
 	game.board.cells[first_clear_row - 1][0] = "T"
-	game.active = Hexomino.new("I")
+	game.active = Polyomino.new("I5")
 	game.active.rotation = 1
 	game.active.position = Vector2i(6, first_clear_row)
-	var six_line_piece = game.active
+	var five_line_piece = game.active
 	game.lock_piece(false)
-	if game.state != game.State.CLEARING or game.clearing_rows != Array(range(first_clear_row, GameConfig.BOARD_SIZE.y)) or game.active != six_line_piece:
-		push_error("A six-line clear must hold the locked piece and defer spawning until all rows resolve")
+	if game.state != game.State.CLEARING or game.clearing_rows != Array(range(first_clear_row, GameConfig.BOARD_SIZE.y)) or game.active != five_line_piece:
+		push_error("A five-line clear must hold the locked piece and defer spawning until all rows resolve")
 		quit(1)
 		return
 	if game.lock_flash_timer <= 0.0 or game.lock_flash_is_hard:
@@ -303,23 +303,24 @@ func run_test() -> void:
 		quit(1)
 		return
 	game.finish_line_clear()
-	if game.state != game.State.PAUSED or game.lines != 6 or game.score != 3000 * (game.start_level + 1):
-		push_error("A six-line clear must remove six rows and apply its score exactly once before play resumes")
+	if game.state != game.State.PAUSED or game.lines != 5 or game.score != 2000 * (game.start_level + 1):
+		push_error("A five-line clear must remove five rows and apply its score exactly once before play resumes")
 		quit(1)
 		return
 	game.toggle_pause()
 	if game.cat_crowd_count() != 1 or game.golden_cat_count() != 1 or game.cat_crowd_jump_timer <= 0.0:
-		push_error("A six-line clear must add one golden cat instead of ordinary cats and make the crowd jump")
+		push_error("A five-line clear must add one golden cat instead of ordinary cats and make the crowd jump")
 		quit(1)
 		return
-	if not game.board.full_rows().is_empty() or game.board.cells[-1][0] != "T" or game.active == six_line_piece:
-		push_error("Six-line compaction must preserve surviving blocks and spawn the next piece afterward")
+	if not game.board.full_rows().is_empty() or game.board.cells[-1][0] != "T" or game.active == five_line_piece:
+		push_error("Five-line compaction must preserve surviving blocks and spawn the next piece afterward")
 		quit(1)
 		return
 	game.retry_game()
+	var expected_drop_cells: int = game.active.cells().size()
 	game.hard_drop()
 	await process_frame
-	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != 6 or game.hard_drop_shock_pixels.size() != 24:
+	if game.hard_drop_fx_timer <= 0.0 or game.hard_drop_landed_cells.size() != expected_drop_cells or game.hard_drop_shock_pixels.size() != 24:
 		push_error("Hard drop should begin the visual trail and impact overlay")
 		quit(1)
 		return
@@ -403,7 +404,7 @@ func run_test() -> void:
 	game._input(post_clear_release)
 	# Android can synthesize a mouse click immediately after a touch. A single
 	# tap must still rotate exactly once.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var rotation_before: int = game.active.rotation
 	var touch_press := InputEventScreenTouch.new()
 	touch_press.index = 0
@@ -435,7 +436,7 @@ func run_test() -> void:
 		return
 	# A small attempted swipe can remain below the axis-lock threshold. It is not
 	# a deliberate stationary tap and must not be reinterpreted as rotation.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var short_swipe_press := InputEventScreenTouch.new()
 	short_swipe_press.index = 0
 	short_swipe_press.position = Vector2(180, 300)
@@ -455,7 +456,7 @@ func run_test() -> void:
 		quit(1)
 		return
 	# Dragging should move during the drag instead of batching movement at release.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var drag_start_x: int = game.active.position.x
 	var drag_press := InputEventScreenTouch.new()
 	drag_press.index = 0
@@ -520,7 +521,7 @@ func run_test() -> void:
 		return
 	# Upward movement is neutral and must not trap the remainder of a held-finger
 	# gesture. Horizontal movement should work immediately afterward.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var neutral_start_position: Vector2i = game.active.position
 	var neutral_up_press := InputEventScreenTouch.new()
 	neutral_up_press.index = 0
@@ -554,7 +555,7 @@ func run_test() -> void:
 		return
 	# A player must be able to position horizontally and then turn the same
 	# held-finger gesture downward for a decisive hard drop.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var combined_piece = game.active
 	var combined_start_x: int = game.active.position.x
 	var combined_press := InputEventScreenTouch.new()
@@ -593,7 +594,7 @@ func run_test() -> void:
 	game._input(combined_release)
 	# Reversing horizontal direction makes the rest of that contact ineligible
 	# for hard drop, while retaining unrestricted side movement and soft drop.
-	game.active = Hexomino.new("T")
+	game.active = Polyomino.new("T4")
 	var reversal_piece = game.active
 	var reversal_press := InputEventScreenTouch.new()
 	reversal_press.index = 0

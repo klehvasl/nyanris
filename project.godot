@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Nyanris Six"
+config/name="Nyanris Mix"
 run/main_scene="res://main.tscn"
 config/icon="res://assets/release/nyanris_pwa_icon_512.png"
 config/features=PackedStringArray("4.7")

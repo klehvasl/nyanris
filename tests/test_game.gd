@@ -6,15 +6,15 @@ func _initialize() -> void:
 	test_piece_geometry()
 	test_board_collision()
 	test_multi_line_removal()
-	test_six_line_removal_compacts_once()
+	test_five_line_removal_compacts_once()
 	test_non_adjacent_row_compaction()
 	test_incomplete_rows_never_clear()
 	test_all_complete_rows_resolve_together()
 	test_gravity_and_scoring()
-	test_seven_bag()
+	test_mixed_bag()
 	test_high_score_ranking()
 	if failures == 0:
-		print("PASS: Nyanris Six gameplay tests")
+		print("PASS: Nyanris Mix gameplay tests")
 		quit(0)
 	else:
 		push_error("FAIL: %d gameplay tests failed" % failures)
@@ -26,16 +26,17 @@ func check(condition: bool, message: String) -> void:
 		push_error(message)
 
 func test_piece_geometry() -> void:
-	var expected_rotations := {"I": 2, "J": 4, "L": 4, "O": 2, "S": 2, "T": 4, "Z": 2}
+	var expected_sizes := {"D2": 2, "I3": 3, "L3": 3, "I4": 4, "J4": 4, "L4": 4, "O4": 4, "S4": 4, "T4": 4, "Z4": 4, "I5": 5, "T5": 5, "U5": 5, "P5": 5, "W5": 5}
+	var expected_rotations := {"D2": 2, "I3": 2, "L3": 4, "I4": 2, "J4": 4, "L4": 4, "O4": 1, "S4": 2, "T4": 4, "Z4": 2, "I5": 2, "T5": 4, "U5": 4, "P5": 4, "W5": 4}
 	for kind: String in GameConfig.PIECE_KINDS:
-		check(Hexomino.rotation_count(kind) == expected_rotations[kind], "%s must have %d distinct rotations" % [kind, expected_rotations[kind]])
-		for rotation in Hexomino.rotation_count(kind):
-			var piece := Hexomino.new(kind)
-			check(piece.cells(Vector2i.ZERO, rotation).size() == 6, "%s rotation %d must have six cells" % [kind, rotation])
+		check(Polyomino.rotation_count(kind) == expected_rotations[kind], "%s must have %d distinct rotations" % [kind, expected_rotations[kind]])
+		for rotation in Polyomino.rotation_count(kind):
+			var piece := Polyomino.new(kind)
+			check(piece.cells(Vector2i.ZERO, rotation).size() == expected_sizes[kind], "%s rotation %d must have %d cells" % [kind, rotation, expected_sizes[kind]])
 
 func test_board_collision() -> void:
 	var board := GameBoard.new()
-	var piece := Hexomino.new("O")
+	var piece := Polyomino.new("O4")
 	check(board.fits(piece, piece.position, 0), "O piece should fit at spawn")
 	check(not board.fits(piece, Vector2i(-2, 0), 0), "O piece should collide with left wall")
 	check(not board.fits(piece, Vector2i(3, GameConfig.BOARD_SIZE.y - 1), 0), "O piece should collide with floor")
@@ -46,8 +47,8 @@ func test_multi_line_removal() -> void:
 	var board := GameBoard.new()
 	var bottom := GameConfig.BOARD_SIZE.y - 1
 	for x in GameConfig.BOARD_SIZE.x:
-		board.cells[bottom - 1][x] = "I"
-		board.cells[bottom][x] = "O"
+		board.cells[bottom - 1][x] = "I4"
+		board.cells[bottom][x] = "O4"
 	check(board.full_rows() == [bottom - 1, bottom], "Two bottom rows should be detected")
 	board.remove_rows([bottom - 1, bottom])
 	check(board.cells.size() == GameConfig.BOARD_SIZE.y, "Board height must remain constant")
@@ -56,21 +57,21 @@ func test_multi_line_removal() -> void:
 	check(board.full_rows().is_empty(), "Both cleared rows must actually be gone")
 	check(board.has_valid_dimensions(), "Board must retain configured dimensions after a double clear")
 
-func test_six_line_removal_compacts_once() -> void:
+func test_five_line_removal_compacts_once() -> void:
 	var board := GameBoard.new()
-	var first_clear := GameConfig.BOARD_SIZE.y - 6
-	# A marker immediately above six completed bottom rows must fall exactly six
+	var first_clear := GameConfig.BOARD_SIZE.y - 5
+	# A marker immediately above five completed bottom rows must fall exactly five
 	# cells and become the new bottom row after the signature clear resolves.
-	board.cells[first_clear - 1][3] = "T"
+	board.cells[first_clear - 1][3] = "T4"
 	for y in range(first_clear, GameConfig.BOARD_SIZE.y):
 		for x in GameConfig.BOARD_SIZE.x:
-			board.cells[y][x] = "I"
+			board.cells[y][x] = "I5"
 	var rows := board.full_rows()
-	check(rows == Array(range(first_clear, GameConfig.BOARD_SIZE.y)), "A six-line clear must detect all intended adjacent rows")
+	check(rows == Array(range(first_clear, GameConfig.BOARD_SIZE.y)), "A five-line clear must detect all intended adjacent rows")
 	board.remove_rows(rows)
-	check(board.full_rows().is_empty(), "No completed row may survive a six-line clear")
-	check(board.cells[-1][3] == "T", "Blocks above a six-line clear must fall exactly six rows")
-	check(board.has_valid_dimensions(), "Board must retain configured dimensions after a six-line clear")
+	check(board.full_rows().is_empty(), "No completed row may survive a five-line clear")
+	check(board.cells[-1][3] == "T4", "Blocks above a five-line clear must fall exactly five rows")
+	check(board.has_valid_dimensions(), "Board must retain configured dimensions after a five-line clear")
 
 func test_non_adjacent_row_compaction() -> void:
 	var board := GameBoard.new()
@@ -92,15 +93,15 @@ func test_incomplete_rows_never_clear() -> void:
 		var board := GameBoard.new()
 		for x in GameConfig.BOARD_SIZE.x:
 			if x != missing_x:
-				board.cells[bottom][x] = "T"
+				board.cells[bottom][x] = "T4"
 		check(not board.is_row_full(bottom), "A row missing column %d must remain incomplete" % missing_x)
 		check(board.full_rows().is_empty(), "An incomplete row must never be returned for clearing")
 	var board := GameBoard.new()
 	for x in GameConfig.BOARD_SIZE.x:
-		board.cells[bottom][x] = "I"
-	board.cells[bottom - 1][0] = "O"
+		board.cells[bottom][x] = "I4"
+	board.cells[bottom - 1][0] = "O4"
 	board.remove_rows(board.full_rows())
-	check(board.cells[bottom][0] == "O", "Blocks above a cleared row must fall without being removed")
+	check(board.cells[bottom][0] == "O4", "Blocks above a cleared row must fall without being removed")
 
 func test_all_complete_rows_resolve_together() -> void:
 	var board := GameBoard.new()
@@ -108,8 +109,8 @@ func test_all_complete_rows_resolve_together() -> void:
 	# Even if a complete row predates the latest placement, it must be found on
 	# the next lock rather than remaining as a solid, playable row.
 	for x in GameConfig.BOARD_SIZE.x:
-		board.cells[bottom][x] = "I"
-	var block := Hexomino.new("O")
+		board.cells[bottom][x] = "I4"
+	var block := Polyomino.new("O4")
 	block.position = Vector2i(3, 2)
 	board.place(block)
 	check(board.full_rows() == [bottom], "Every complete row must be detected regardless of where the latest piece landed")
@@ -127,15 +128,19 @@ func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.LINE_CLEAR_SECONDS, 0.35), "Line clear pause should be 350 ms")
 	check(is_equal_approx(GameConfig.HARD_DROP_TRAIL_SECONDS, 0.20), "Hard-drop pixel trail should last 200 ms")
 	check(is_equal_approx(GameConfig.HARD_DROP_IMPACT_SECONDS, 0.28), "Hard-drop impact should remain visible for 280 ms")
-	check(GameConfig.LINE_POINTS[6] == 3000, "Six-line base score should be 3000")
+	check(GameConfig.LINE_POINTS[5] == 2000, "Five-line base score should be 2000")
 
-func test_seven_bag() -> void:
+func test_mixed_bag() -> void:
 	var randomizer := PieceRandomizer.new(12345)
 	for bag_number in 2:
 		var seen := {}
+		var occupied_cells := 0
 		for draw in GameConfig.PIECE_KINDS.size():
-			seen[randomizer.next_piece()] = true
-		check(seen.size() == GameConfig.PIECE_KINDS.size(), "Bag %d must contain all seven unique pieces" % bag_number)
+			var kind := randomizer.next_piece()
+			seen[kind] = true
+			occupied_cells += Polyomino.BASE_SHAPES[kind].size()
+		check(seen.size() == GameConfig.PIECE_KINDS.size(), "Bag %d must contain all fifteen unique pieces" % bag_number)
+		check(occupied_cells == 61, "Bag %d must contain exactly 61 occupied cells" % bag_number)
 		for kind: String in GameConfig.PIECE_KINDS:
 			check(seen.has(kind), "Bag %d is missing %s" % [bag_number, kind])
 

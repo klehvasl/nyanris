@@ -1,16 +1,24 @@
-class_name Hexomino
+class_name Polyomino
 extends RefCounted
 
-# The seven tetromino families extended to six cells. Rotations are generated
-# and normalized once, which keeps every footprint auditable here.
+# Fixed 15-piece bag: one domino, two triominoes, seven tetrominoes, and five
+# pentominoes. The bag always contains exactly 61 occupied cells.
 const BASE_SHAPES := {
-	"I": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(4,0), Vector2i(5,0)],
-	"J": [Vector2i(2,0), Vector2i(2,1), Vector2i(2,2), Vector2i(0,3), Vector2i(1,3), Vector2i(2,3)],
-	"L": [Vector2i(0,0), Vector2i(0,1), Vector2i(0,2), Vector2i(0,3), Vector2i(1,3), Vector2i(2,3)],
-	"O": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
-	"S": [Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
-	"T": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1), Vector2i(1,2), Vector2i(1,3)],
-	"Z": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1), Vector2i(2,1), Vector2i(3,1)],
+	"D2": [Vector2i(0,0), Vector2i(1,0)],
+	"I3": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0)],
+	"L3": [Vector2i(0,0), Vector2i(0,1), Vector2i(1,1)],
+	"I4": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0)],
+	"J4": [Vector2i(0,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
+	"L4": [Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
+	"O4": [Vector2i(0,0), Vector2i(1,0), Vector2i(0,1), Vector2i(1,1)],
+	"S4": [Vector2i(1,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1)],
+	"T4": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1)],
+	"Z4": [Vector2i(0,0), Vector2i(1,0), Vector2i(1,1), Vector2i(2,1)],
+	"I5": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(3,0), Vector2i(4,0)],
+	"T5": [Vector2i(0,0), Vector2i(1,0), Vector2i(2,0), Vector2i(1,1), Vector2i(1,2)],
+	"U5": [Vector2i(0,0), Vector2i(2,0), Vector2i(0,1), Vector2i(1,1), Vector2i(2,1)],
+	"P5": [Vector2i(0,0), Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(0,2)],
+	"W5": [Vector2i(0,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,2), Vector2i(2,2)]
 }
 
 static var _rotation_cache: Dictionary = {}

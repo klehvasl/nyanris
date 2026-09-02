@@ -113,7 +113,7 @@ func play_soft_drop() -> void:
 	play_effect("soft_drop")
 
 func play_clear(count: int) -> void:
-	if count == 6 and tetris_clear_sample:
+	if count == 5 and tetris_clear_sample:
 		play_sample(tetris_clear_sample, 1.60, 1.0, -3.0)
 	elif line_clear_sample:
 		# The supplied one-line sound stays recognizable for doubles and triples;

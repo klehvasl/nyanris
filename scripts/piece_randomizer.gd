@@ -22,7 +22,7 @@ func refill() -> void:
 	bag.clear()
 	for kind: String in GameConfig.PIECE_KINDS:
 		bag.append(kind)
-	# Fisher-Yates shuffle so each seven-piece bag is uniformly shuffled.
+	# Fisher-Yates shuffle so each fixed fifteen-piece bag is uniformly shuffled.
 	for i in range(bag.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var swap := bag[i]
