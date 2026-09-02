@@ -110,6 +110,24 @@ func settle_tracked_cells(tracked_cells: Array, kind: String) -> Array:
 		settled.append(landing)
 	return settled
 
+func settle_all_cells() -> int:
+	# Flowing mode treats every occupied tile as an independent cell. Compact
+	# each column to the floor while preserving the cells' vertical order, so a
+	# later clear can never leave older pieces floating above a new cavity.
+	var moved := 0
+	for x in GameConfig.BOARD_SIZE.x:
+		var column: Array[String] = []
+		for y in range(GameConfig.BOARD_SIZE.y - 1, -1, -1):
+			var kind: String = cells[y][x]
+			if kind != "":
+				column.append(kind)
+				if y != GameConfig.BOARD_SIZE.y - column.size():
+					moved += 1
+			cells[y][x] = ""
+		for index in column.size():
+			cells[GameConfig.BOARD_SIZE.y - 1 - index][x] = column[index]
+	return moved
+
 func has_valid_dimensions() -> bool:
 	if cells.size() != GameConfig.BOARD_SIZE.y:
 		return false

@@ -1264,10 +1264,11 @@ func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
 	flow_falling_cells = active.cells().filter(func(cell: Vector2i) -> bool: return cell.y >= 0)
 	flow_falling_kind = active.kind
 	if game_mode == GameMode.FLOWING:
-		# A Flowing piece stops as a rigid shape, then its individual cells pour
-		# through every unsupported opening. This happens on every placement; a
-		# line clear is an outcome of settling, not a prerequisite for gravity.
+		# A Flowing piece stops as a rigid shape, then every cell on the board pours
+		# through unsupported openings. Rechecking older cells matters because a
+		# later placement or clear can remove support they used to have.
 		flow_falling_cells = board.settle_tracked_cells(flow_falling_cells, flow_falling_kind)
+		board.settle_all_cells()
 		lock_flash_cells = flow_falling_cells.duplicate()
 		if is_hard_drop:
 			hard_drop_landed_cells = flow_falling_cells.duplicate()
@@ -1369,8 +1370,7 @@ func finish_line_clear() -> void:
 		cat_happy_timer = 1.5
 		cat_crowd_jump_timer = CAT_CROWD_JUMP_SECONDS
 	if game_mode == GameMode.FLOWING:
-		flow_falling_cells = board.remap_cells_after_row_removal(flow_falling_cells, resolved_rows)
-		flow_falling_cells = board.settle_tracked_cells(flow_falling_cells, flow_falling_kind)
+		board.settle_all_cells()
 		var cascade_rows := board.full_rows()
 		if not cascade_rows.is_empty():
 			flow_cascade_depth += 1

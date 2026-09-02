@@ -12,6 +12,7 @@ func _initialize() -> void:
 	test_all_complete_rows_resolve_together()
 	test_flow_floor_push()
 	test_flow_cells_settle_on_every_lock()
+	test_flow_all_cells_resettle_after_support_changes()
 	test_flow_piece_residue_cascade()
 	test_gravity_and_scoring()
 	test_mixed_bag()
@@ -162,6 +163,21 @@ func test_flow_cells_settle_on_every_lock() -> void:
 	check(settled.has(Vector2i(3, bottom)), "A placed cell must fall into an unsupported target before any clear")
 	check(settled.has(Vector2i(4, bottom)), "Each column of a placed piece must settle independently")
 	check(board.full_rows() == [bottom], "Placement gravity must be able to create the first clear")
+
+func test_flow_all_cells_resettle_after_support_changes() -> void:
+	var board := GameBoard.new()
+	var bottom := GameConfig.BOARD_SIZE.y - 1
+	# These cells model an older piece whose support disappeared in a later turn.
+	board.cells[bottom][2] = "O4"
+	board.cells[bottom - 3][2] = "T4"
+	board.cells[bottom - 5][2] = "I3"
+	board.cells[bottom - 4][7] = "L3"
+	var moved := board.settle_all_cells()
+	check(moved == 3, "Board-wide Flowing gravity must move every unsupported older cell")
+	check(board.cells[bottom][2] == "O4", "A supported bottom cell must remain in place")
+	check(board.cells[bottom - 1][2] == "T4", "The lower floating cell must settle directly above its support")
+	check(board.cells[bottom - 2][2] == "I3", "Vertical order must be preserved while a column settles")
+	check(board.cells[bottom][7] == "L3", "An unsupported cell in another column must fall to the floor")
 
 func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.gravity_seconds(0), 53.0 / 60.0), "Level 0 gravity should match Game Boy's 53 frames")
