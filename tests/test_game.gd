@@ -10,6 +10,8 @@ func _initialize() -> void:
 	test_non_adjacent_row_compaction()
 	test_incomplete_rows_never_clear()
 	test_all_complete_rows_resolve_together()
+	test_flow_floor_push()
+	test_flow_piece_residue_cascade()
 	test_gravity_and_scoring()
 	test_mixed_bag()
 	test_high_score_ranking()
@@ -117,6 +119,35 @@ func test_all_complete_rows_resolve_together() -> void:
 	board.remove_rows(board.full_rows())
 	check(not board.is_row_full(bottom), "A complete bottom row must be removed before play continues")
 
+func test_flow_floor_push() -> void:
+	var board := GameBoard.new()
+	board.cells[1][3] = "T4"
+	var incoming: Array[String] = []
+	for x in GameConfig.BOARD_SIZE.x:
+		incoming.append("I3" if x % 4 != 0 else "")
+	check(board.push_up(incoming), "A flow row should rise while the ceiling is open")
+	check(board.cells[0][3] == "T4", "Existing flow cells must move exactly one row upward")
+	check(board.cells[-1] == incoming, "The incoming pattern must become the new bottom row")
+	board.cells[0][0] = "O4"
+	check(not board.push_up(incoming), "Flowing must report game over before an occupied ceiling is discarded")
+
+func test_flow_piece_residue_cascade() -> void:
+	var board := GameBoard.new()
+	var bottom := GameConfig.BOARD_SIZE.y - 1
+	for x in GameConfig.BOARD_SIZE.x:
+		if x != 5:
+			board.cells[bottom][x] = "O4"
+		board.cells[bottom - 1][x] = "J4"
+	board.cells[bottom - 2][5] = "I3"
+	board.cells[bottom - 1][5] = "I3"
+	var tracked: Array = [Vector2i(5, bottom - 2), Vector2i(5, bottom - 1)]
+	var cleared: Array[int] = [bottom - 1]
+	board.remove_rows(cleared)
+	tracked = board.remap_cells_after_row_removal(tracked, cleared)
+	tracked = board.settle_tracked_cells(tracked, "I3")
+	check(tracked == [Vector2i(5, bottom)], "The surviving cell of a cleared piece must fall into the lowest opening")
+	check(board.full_rows() == [bottom], "A falling piece remnant must be able to complete a cascade line")
+
 func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.gravity_seconds(0), 53.0 / 60.0), "Level 0 gravity should match Game Boy's 53 frames")
 	check(is_equal_approx(GameConfig.gravity_seconds(5), 33.0 / 60.0), "Level 5 gravity should match Game Boy's 33 frames")
@@ -129,6 +160,11 @@ func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.HARD_DROP_TRAIL_SECONDS, 0.20), "Hard-drop pixel trail should last 200 ms")
 	check(is_equal_approx(GameConfig.HARD_DROP_IMPACT_SECONDS, 0.28), "Hard-drop impact should remain visible for 280 ms")
 	check(GameConfig.LINE_POINTS[5] == 2000, "Five-line base score should be 2000")
+	check(is_equal_approx(GameConfig.flow_rise_seconds(0), 12.0), "Flowing level 0 should rise every twelve seconds")
+	check(is_equal_approx(GameConfig.flow_rise_seconds(9), 7.05), "Flowing rise pressure should scale with starting level")
+	for mask: String in GameConfig.FLOW_INITIAL_MASKS + GameConfig.FLOW_RISING_MASKS:
+		check(mask.length() == GameConfig.BOARD_SIZE.x, "Every flow pattern must span the board width")
+		check(mask.contains("."), "Every flow row must retain at least one playable opening")
 
 func test_mixed_bag() -> void:
 	var randomizer := PieceRandomizer.new(12345)

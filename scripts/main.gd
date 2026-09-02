@@ -2,6 +2,7 @@ extends Control
 
 enum State { TITLE, LEVEL_SELECT, PLAYING, CLEARING, PAUSED, ENDING, GAME_OVER, NAME_ENTRY, HIGH_SCORES }
 enum TouchGesture { PENDING, HORIZONTAL, VERTICAL, HARD_DROP, CONTROLS }
+enum GameMode { STANDARD, FLOWING }
 
 const PANEL := Color("1d1b1a")
 const CREAM := Color("efe2be")
@@ -9,7 +10,7 @@ const WOOD := Color("68462f")
 const WOOD_LIGHT := Color("a7754a")
 const START_BUTTON_RECT := Rect2(90, 538, 180, 42)
 const MENU_BUTTON_SIZE := Vector2(180, 38)
-const LEVEL_GRID_ORIGIN := Vector2(58, 434)
+const LEVEL_GRID_ORIGIN := Vector2(58, 462)
 const LEVEL_BUTTON_SIZE := Vector2(44, 32)
 const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 1500
@@ -57,6 +58,7 @@ var score := 0
 var lines := 0
 var level := 0
 var start_level := 0
+var game_mode := GameMode.STANDARD
 var line_clear_seconds := GameConfig.LINE_CLEAR_SECONDS
 var high_score := 0
 var high_scores: Array[Dictionary] = []
@@ -111,6 +113,11 @@ var controls_visible := false
 var first_gameplay_controls_pending := false
 var controls_resume_gameplay := false
 var pause_after_clear := false
+var flow_rise_accumulator := 0.0
+var flow_pattern_index := 0
+var flow_cascade_depth := 0
+var flow_falling_cells: Array = []
+var flow_falling_kind := ""
 var piece_randomizer := PieceRandomizer.new()
 var audio: AudioSystem
 var background: Texture2D
@@ -131,6 +138,7 @@ var lantern_texture: Texture2D
 var start_button: Button
 var level_buttons: Array[Button] = []
 var level_select_label: Label
+var mode_buttons: Array[Button] = []
 var music_button: Button
 var scores_button: Button
 var back_button: Button
@@ -217,13 +225,25 @@ func create_start_button() -> void:
 
 func create_level_selector() -> void:
 	level_select_label = Label.new()
-	level_select_label.position = Vector2(58, 402)
+	level_select_label.position = Vector2(58, 436)
 	level_select_label.size = Vector2(244, 26)
 	level_select_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	level_select_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	level_select_label.add_theme_font_size_override("font_size", 14)
 	level_select_label.add_theme_color_override("font_color", CREAM)
 	add_child(level_select_label)
+	for mode_value in [GameMode.STANDARD, GameMode.FLOWING]:
+		var mode_button := Button.new()
+		mode_button.position = Vector2(58 + mode_buttons.size() * 128, 402)
+		mode_button.size = Vector2(116, 30)
+		mode_button.text = "STANDARD" if mode_value == GameMode.STANDARD else "FLOWING"
+		mode_button.toggle_mode = true
+		mode_button.focus_mode = Control.FOCUS_ALL
+		mode_button.add_theme_font_size_override("font_size", 12)
+		style_menu_button(mode_button)
+		mode_button.pressed.connect(set_game_mode.bind(mode_value))
+		add_child(mode_button)
+		mode_buttons.append(mode_button)
 	for level_number in range(GameConfig.MAX_LEVEL + 1):
 		var button := Button.new()
 		var column := level_number % 5
@@ -239,6 +259,7 @@ func create_level_selector() -> void:
 		add_child(button)
 		level_buttons.append(button)
 	set_start_level(start_level, false)
+	set_game_mode(game_mode, false)
 
 func style_menu_button(button: Button) -> void:
 	var normal := StyleBoxFlat.new()
@@ -274,6 +295,16 @@ func set_start_level(value: int, play_sound := true) -> void:
 		level_buttons[i].set_pressed_no_signal(i == start_level)
 	if changed and play_sound and audio:
 		audio.play_ui_select()
+
+func set_game_mode(value: int, play_sound := true) -> void:
+	var next_mode := GameMode.FLOWING if value == GameMode.FLOWING else GameMode.STANDARD
+	var changed := next_mode != game_mode
+	game_mode = next_mode
+	for i in mode_buttons.size():
+		mode_buttons[i].set_pressed_no_signal(i == game_mode)
+	if changed and play_sound and audio:
+		audio.play_ui_select()
+	queue_redraw()
 
 func set_line_clear_seconds(value: float) -> void:
 	line_clear_seconds = clampf(value, 0.08, 0.40)
@@ -498,6 +529,13 @@ func _process(delta: float) -> void:
 		if clear_timer <= 0.0:
 			finish_line_clear()
 	elif state == State.PLAYING:
+		if game_mode == GameMode.FLOWING:
+			flow_rise_accumulator += delta
+			if flow_rise_accumulator >= GameConfig.flow_rise_seconds(level):
+				flow_rise_accumulator = 0.0
+				if not advance_flow_floor():
+					finish_run()
+					return
 		process_keyboard_repeat(delta)
 		if board.fits(active, active.position + Vector2i.DOWN, active.rotation):
 			lock_timer = 0.0
@@ -542,6 +580,8 @@ func update_menu_controls() -> void:
 	level_select_label.visible = on_level_select
 	for button in level_buttons:
 		button.visible = on_level_select
+	for button in mode_buttons:
+		button.visible = on_level_select
 	start_button.visible = on_level_select or on_game_over or on_paused
 	music_button.visible = state not in [State.CLEARING, State.ENDING, State.NAME_ENTRY]
 	music_button.position = Vector2(250, 18) if state in [State.TITLE, State.LEVEL_SELECT, State.GAME_OVER, State.HIGH_SCORES] else Vector2(154, 55)
@@ -585,6 +625,8 @@ func update_menu_controls() -> void:
 		for control: Control in [level_select_label, start_button, music_button, scores_button, back_button, pause_button, retry_button, controls_button, name_entry, name_submit_button]:
 			control.visible = false
 		for button in level_buttons:
+			button.visible = false
+		for button in mode_buttons:
 			button.visible = false
 		controls_close_button.visible = true
 
@@ -716,7 +758,9 @@ func is_pointer_over_menu_control(event: InputEvent) -> bool:
 		pointer_position = event.position
 	if pointer_position.x < 0.0:
 		return false
-	for control: Control in [music_button, scores_button, back_button, start_button, pause_button, retry_button, controls_button, controls_close_button, name_entry, name_submit_button]:
+	var menu_controls: Array[Control] = [music_button, scores_button, back_button, start_button, pause_button, retry_button, controls_button, controls_close_button, name_entry, name_submit_button]
+	menu_controls.append_array(mode_buttons)
+	for control: Control in menu_controls:
 		if control and control.visible and control.get_global_rect().has_point(pointer_position):
 			return true
 	return false
@@ -1021,8 +1065,15 @@ func start_game() -> void:
 	cat_crowd_rng.randomize()
 	ending_preview_mode = false
 	pause_after_clear = false
+	flow_rise_accumulator = 0.0
+	flow_pattern_index = 0
+	flow_cascade_depth = 0
+	flow_falling_cells.clear()
+	flow_falling_kind = ""
 	reset_touch_gesture()
 	piece_randomizer.reset()
+	if game_mode == GameMode.FLOWING:
+		populate_flow_floor()
 	next_kind = piece_randomizer.next_piece()
 	state = State.PLAYING
 	update_menu_controls()
@@ -1054,6 +1105,34 @@ func spawn_piece() -> void:
 	lock_timer = 0.0
 	if not board.fits(active, active.position, active.rotation):
 		finish_run()
+
+func populate_flow_floor() -> void:
+	for pattern_offset in GameConfig.FLOW_STARTING_ROWS:
+		var mask: String = GameConfig.FLOW_INITIAL_MASKS[pattern_offset % GameConfig.FLOW_INITIAL_MASKS.size()]
+		var kind: String = GameConfig.PIECE_KINDS[(pattern_offset * 3 + 4) % GameConfig.PIECE_KINDS.size()]
+		var y := GameConfig.BOARD_SIZE.y - 1 - pattern_offset
+		for x in GameConfig.BOARD_SIZE.x:
+			board.cells[y][x] = kind if mask[x] == "X" else ""
+
+func build_flow_row(pattern_index: int) -> Array[String]:
+	var mask: String = GameConfig.FLOW_RISING_MASKS[pattern_index % GameConfig.FLOW_RISING_MASKS.size()]
+	var kind: String = GameConfig.PIECE_KINDS[(pattern_index * 5 + 2) % GameConfig.PIECE_KINDS.size()]
+	var row: Array[String] = []
+	for x in GameConfig.BOARD_SIZE.x:
+		row.append(kind if mask[x] == "X" else "")
+	return row
+
+func advance_flow_floor() -> bool:
+	var row := build_flow_row(flow_pattern_index)
+	flow_pattern_index += 1
+	if not board.push_up(row):
+		return false
+	# The falling piece remains in world space while the floor rises. Contact with
+	# it means the flow caught the player, rather than silently moving the piece.
+	if active and not board.fits(active, active.position, active.rotation):
+		return false
+	audio.play_lock()
+	return true
 
 func finish_run() -> void:
 	if state == State.ENDING:
@@ -1172,6 +1251,9 @@ func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
 	if play_lock_sound:
 		audio.play_lock()
 	board.place(active)
+	flow_cascade_depth = 0
+	flow_falling_cells = active.cells().filter(func(cell: Vector2i) -> bool: return cell.y >= 0)
+	flow_falling_kind = active.kind
 	# Every complete row resolves as soon as a piece locks. The next
 	# piece is not spawned until the clear animation and removal finish.
 	clearing_rows = board.full_rows()
@@ -1198,12 +1280,14 @@ func finish_line_clear() -> void:
 		spawn_piece()
 		pause_if_requested_after_clear()
 		return
-	board.remove_rows(clearing_rows)
+	var resolved_rows := clearing_rows.duplicate()
+	board.remove_rows(resolved_rows)
 	lock_flash_timer = 0.0
 	lock_flash_cells.clear()
 	audio.play_clear(count)
 	var previous_level := level
-	score += GameConfig.LINE_POINTS[count] * (level + 1)
+	var cascade_multiplier := flow_cascade_depth + 1 if game_mode == GameMode.FLOWING else 1
+	score += GameConfig.LINE_POINTS[count] * (level + 1) * cascade_multiplier
 	lines += count
 	if count == 5:
 		add_crowd_cats(1, true)
@@ -1215,6 +1299,17 @@ func finish_line_clear() -> void:
 	if count == 5:
 		cat_happy_timer = 1.5
 		cat_crowd_jump_timer = CAT_CROWD_JUMP_SECONDS
+	if game_mode == GameMode.FLOWING:
+		flow_falling_cells = board.remap_cells_after_row_removal(flow_falling_cells, resolved_rows)
+		flow_falling_cells = board.settle_tracked_cells(flow_falling_cells, flow_falling_kind)
+		var cascade_rows := board.full_rows()
+		if not cascade_rows.is_empty():
+			flow_cascade_depth += 1
+			clearing_rows = cascade_rows
+			state = State.CLEARING
+			clear_timer = line_clear_seconds
+			queue_redraw()
+			return
 	clearing_rows.clear()
 	state = State.PLAYING
 	spawn_piece()
@@ -1351,6 +1446,8 @@ func _draw() -> void:
 	if cat_texture:
 		draw_texture_rect(cat_texture, Rect2(4, 39, 46, 63), false)
 	draw_string(ThemeDB.fallback_font, Vector2(154, 97), "HIGH %06d" % high_score, HORIZONTAL_ALIGNMENT_CENTER, 98, 10, Color("c8ad7f"))
+	if game_mode == GameMode.FLOWING and state in [State.PLAYING, State.PAUSED, State.CLEARING]:
+		draw_flow_warning(board_rect)
 	if state == State.PAUSED:
 		draw_overlay("PAUSED", "")
 	elif state == State.GAME_OVER:
@@ -1558,7 +1655,18 @@ func draw_level_select_screen() -> void:
 		draw_rect(Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), Color("241b15"))
 	draw_rect(Rect2(36, 366, 288, 226), Color(0.055, 0.05, 0.04, 0.91))
 	draw_rect(Rect2(36, 366, 288, 226), Color("b8935d"), false, 2.0)
-	draw_string(ThemeDB.fallback_font, Vector2(50, 395), "CHOOSE YOUR PACE", HORIZONTAL_ALIGNMENT_CENTER, 260, 20, CREAM)
+	draw_string(ThemeDB.fallback_font, Vector2(50, 393), "CHOOSE MODE & PACE", HORIZONTAL_ALIGNMENT_CENTER, 260, 18, CREAM)
+
+func draw_flow_warning(board_rect: Rect2) -> void:
+	var interval := GameConfig.flow_rise_seconds(level)
+	var remaining := maxf(0.0, interval - flow_rise_accumulator)
+	var urgent := remaining <= 3.0
+	var pulse := 0.76 + sin(Time.get_ticks_msec() * 0.012) * 0.20 if urgent else 0.72
+	var warning_color := Color(1.0, 0.68, 0.24, pulse) if urgent else Color(0.84, 0.76, 0.58, pulse)
+	var warning_rect := Rect2(board_rect.end.x - 72, board_rect.position.y + 6, 66, 22)
+	draw_rect(warning_rect, Color(0.04, 0.035, 0.03, 0.78))
+	draw_rect(warning_rect, warning_color, false, 1.0)
+	draw_string(ThemeDB.fallback_font, warning_rect.position + Vector2(4, 15), "FLOW ↑ %02d" % ceili(remaining), HORIZONTAL_ALIGNMENT_CENTER, 58, 9, warning_color)
 
 func draw_high_scores_screen() -> void:
 	if level_select_background:

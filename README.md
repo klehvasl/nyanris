@@ -12,6 +12,8 @@ The published Web version remains the original game until this branch is ready f
 
 Press Start on the title screen to open the touch-friendly starting-level grid. Left/Right moves across levels, Up/Down moves between rows, and Enter/Space confirms. Named top-ten scores are saved locally and can be viewed from level selection or the game-over screen.
 
+The level screen also offers two rulesets. **Standard** is the existing falling-block game. **Flowing** starts above a seven-row patterned floor and adds another incomplete row from below on a visible timer. If the floor reaches the ceiling or touches the active piece, the run ends. When a placed piece completes a line, its surviving cells fall independently; any line they complete clears as a score-multiplied cascade before the next piece appears. The floor masks and rise timing are centralized in `scripts/game_config.gd` for later tuning.
+
 In debug builds, press 7 to preview Stargazer or 8 to preview Lantern from a menu. Preview endings return to that menu and never submit their temporary score. Godot reserves F7/F8 while running from the editor.
 
 ## Export

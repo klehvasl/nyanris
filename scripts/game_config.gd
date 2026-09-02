@@ -14,6 +14,28 @@ const ARR_SECONDS := 0.055
 const SOFT_DROP_SECONDS := 0.075
 const HARD_DROP_TRAIL_SECONDS := 0.20
 const HARD_DROP_IMPACT_SECONDS := 0.28
+const FLOW_RISE_SECONDS := 12.0
+const FLOW_RISE_MIN_SECONDS := 6.0
+const FLOW_STARTING_ROWS := 7
+
+# Temporary Flowing-mode floor studies. Each string is read left-to-right and
+# bottom-to-top; dots are open cells. Keeping at least two openings in every
+# row guarantees the starting pattern never awards a free clear.
+const FLOW_INITIAL_MASKS := [
+	"XXXX..XXXX..",
+	"XXX..XXXXX..",
+	"XX..XXXX..XX",
+	"X..XXXX..XXX",
+	"..XXXX..XXXX",
+	".XXX...XXX..",
+	"XX...XX...XX",
+]
+const FLOW_RISING_MASKS := [
+	"XXX.XXXX.XXX",
+	"X.XXXX.XXXX.",
+	".XXXX.XXXX.X",
+	"XX.XXXX.XXX.",
+]
 
 # Original Game Boy Tetris normal level 0-9 timings, expressed as frames per row.
 # The hardware runs at about 59.73 Hz; 60 Hz is used here for stable cross-platform timing.
@@ -37,3 +59,6 @@ const TILE_SOURCE_KIND := {
 
 static func gravity_seconds(level: int) -> float:
 	return GRAVITY_FRAMES[clampi(level, 0, MAX_LEVEL)] / 60.0
+
+static func flow_rise_seconds(level: int) -> float:
+	return maxf(FLOW_RISE_MIN_SECONDS, FLOW_RISE_SECONDS - clampi(level, 0, MAX_LEVEL) * 0.55)

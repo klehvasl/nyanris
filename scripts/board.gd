@@ -61,6 +61,55 @@ func remove_rows(rows: Array[int]) -> void:
 		survivors.push_front(empty)
 	cells = survivors
 
+func push_up(new_bottom_row: Array[String]) -> bool:
+	# The caller can end the run when an occupied ceiling row would be pushed
+	# outside the playfield. The board is left untouched in that case.
+	for value: String in cells[0]:
+		if value != "":
+			return false
+	if new_bottom_row.size() != GameConfig.BOARD_SIZE.x:
+		return false
+	cells.pop_front()
+	cells.append(new_bottom_row.duplicate())
+	return true
+
+func remap_cells_after_row_removal(tracked_cells: Array, removed_rows: Array[int]) -> Array:
+	# Return the new coordinates of tracked cells that survived a row clear.
+	# Row compaction moves a cell down once for each cleared row below it.
+	var result: Array = []
+	for cell: Vector2i in tracked_cells:
+		if removed_rows.has(cell.y):
+			continue
+		var shifted_y := cell.y
+		for row: int in removed_rows:
+			if row > cell.y:
+				shifted_y += 1
+		result.append(Vector2i(cell.x, shifted_y))
+	return result
+
+func settle_tracked_cells(tracked_cells: Array, kind: String) -> Array:
+	# Flowing mode gives the surviving cells from the just-placed piece their
+	# own gravity. Remove them first, then settle bottom-to-top so they cannot
+	# pass through each other and can create a legitimate cascade line.
+	var movable: Array = []
+	for cell: Vector2i in tracked_cells:
+		if cell.y >= 0 and cell.y < GameConfig.BOARD_SIZE.y \
+				and cell.x >= 0 and cell.x < GameConfig.BOARD_SIZE.x:
+			cells[cell.y][cell.x] = ""
+			movable.append(cell)
+	movable.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y > b.y
+	)
+	var settled: Array = []
+	for cell: Vector2i in movable:
+		var landing_y := cell.y
+		while landing_y + 1 < GameConfig.BOARD_SIZE.y and cells[landing_y + 1][cell.x] == "":
+			landing_y += 1
+		var landing := Vector2i(cell.x, landing_y)
+		cells[landing.y][landing.x] = kind
+		settled.append(landing)
+	return settled
+
 func has_valid_dimensions() -> bool:
 	if cells.size() != GameConfig.BOARD_SIZE.y:
 		return false
