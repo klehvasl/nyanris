@@ -15,7 +15,7 @@ const LEVEL_BUTTON_GAP := Vector2(6, 6)
 const MOUSE_AFTER_TOUCH_SUPPRESS_MS := 1500
 const TOUCH_AXIS_LOCK_PIXELS := 10.0
 const TOUCH_TAP_MAX_PIXELS := 5.0
-const TOUCH_HORIZONTAL_STEP_PIXELS := 25.0
+const TOUCH_HORIZONTAL_STEP_PIXELS := 20.0
 const TOUCH_VERTICAL_STEP_PIXELS := 12.0
 const TOUCH_AXIS_CHANGE_PIXELS := 18.0
 const TOUCH_SWIPE_DROP_MIN_PIXELS := 48.0
@@ -45,12 +45,12 @@ const LANTERN_AMBIENT_POSITIONS := [
 ]
 const CONTROLS_PANEL_RECT := Rect2(24, 70, 312, 500)
 const CAT_CROWD_JUMP_SECONDS := 0.62
-const CAT_CROWD_SIZE := Vector2(31, 37)
-const CAT_CROWD_MIN := Vector2(312, 116)
-const CAT_CROWD_MAX := Vector2(338, 594)
+const CAT_CROWD_SIZE := Vector2(24, 29)
+const CAT_CROWD_MIN := Vector2(324, 116)
+const CAT_CROWD_MAX := Vector2(334, 594)
 
 var board := GameBoard.new()
-var active: Tetromino
+var active: Hexomino
 var next_kind := ""
 var state := State.TITLE
 var score := 0
@@ -194,8 +194,9 @@ func create_light_fx_layer() -> void:
 	add_child(light_fx_layer)
 
 func load_block_textures() -> void:
-	for kind in ["I", "O", "T", "S", "Z", "J", "L"]:
-		var path := "res://assets/blocks/wood/tile_%s.png" % kind.to_lower()
+	for kind: String in GameConfig.PIECE_KINDS:
+		var source_kind: String = GameConfig.TILE_SOURCE_KIND[kind]
+		var path := "res://assets/blocks/wood/tile_%s.png" % source_kind.to_lower()
 		if ResourceLoader.exists(path):
 			tile_textures[kind] = load(path)
 	ghost_texture = load("res://assets/blocks/processed/ghost.png")
@@ -1046,7 +1047,7 @@ func retry_game() -> void:
 	start_game()
 
 func spawn_piece() -> void:
-	active = Tetromino.new(next_kind)
+	active = Hexomino.new(next_kind)
 	next_kind = piece_randomizer.next_piece()
 	gravity_accumulator = 0.0
 	soft_drop_accumulator = 0.0
@@ -1115,8 +1116,7 @@ func try_move(offset: Vector2i) -> bool:
 	return false
 
 func try_rotate() -> void:
-	var states: Array = Tetromino.SHAPES[active.kind]
-	var target_rotation := (active.rotation + 1) % states.size()
+	var target_rotation := (active.rotation + 1) % Hexomino.rotation_count(active.kind)
 	for kick in [0, -1, 1, -2, 2]:
 		var target := active.position + Vector2i(kick, 0)
 		if board.fits(active, target, target_rotation):
@@ -1172,7 +1172,7 @@ func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
 	if play_lock_sound:
 		audio.play_lock()
 	board.place(active)
-	# Tetris resolves every complete row as soon as a piece locks. The next
+	# Every complete row resolves as soon as a piece locks. The next
 	# piece is not spawned until the clear animation and removal finish.
 	clearing_rows = board.full_rows()
 	if clearing_rows.is_empty():
@@ -1205,14 +1205,14 @@ func finish_line_clear() -> void:
 	var previous_level := level
 	score += GameConfig.LINE_POINTS[count] * (level + 1)
 	lines += count
-	if count == 4:
+	if count == 6:
 		add_crowd_cats(1, true)
 	else:
 		add_crowd_cats(count)
 	level = mini(start_level + floori(lines / 10.0), GameConfig.MAX_LEVEL)
 	if level > previous_level:
 		audio.play_level_up()
-	if count == 4:
+	if count == 6:
 		cat_happy_timer = 1.5
 		cat_crowd_jump_timer = CAT_CROWD_JUMP_SECONDS
 	clearing_rows.clear()
@@ -1296,9 +1296,9 @@ func _draw() -> void:
 		draw_texture_rect(background, Rect2(Vector2.ZERO, Vector2(GameConfig.LOGICAL_SIZE)), false, Color(0.65,0.65,0.65,1))
 	draw_rect(Rect2(0, 0, 360, 640), Color(0.07,0.055,0.045,0.70))
 	if board_frame:
-		# The side HUD is gone; the frame opening now maps over a centered 250x500
-		# board that uses nearly the full portrait height.
-		draw_texture_rect(board_frame, Rect2(-16, -33, 364, 753), false)
+		# Stretch the existing wooden frame around the wider 14x24 opening. The
+		# texture is decorative, so this avoids temporary replacement art.
+		draw_texture_rect(board_frame, Rect2(-38, -33, 416, 753), false)
 	var board_rect := Rect2(GameConfig.BOARD_ORIGIN, GameConfig.BOARD_SIZE * GameConfig.CELL_SIZE)
 	draw_rect(board_rect, Color("151719"))
 	for y in GameConfig.BOARD_SIZE.y + 1:
@@ -1331,7 +1331,7 @@ func _draw() -> void:
 	draw_panel(Rect2(154, 4, 98, 47), "LEVEL", "%02d" % level)
 	draw_panel(Rect2(54, 55, 98, 47), "LINES", "%03d" % lines)
 	if next_kind != "":
-		var preview := Tetromino.new(next_kind)
+		var preview := Hexomino.new(next_kind)
 		var preview_cells := preview.cells(Vector2i.ZERO, 0)
 		var min_cell := Vector2i(99, 99)
 		var max_cell := Vector2i(-99, -99)
@@ -1340,7 +1340,7 @@ func _draw() -> void:
 			min_cell.y = mini(min_cell.y, cell.y)
 			max_cell.x = maxi(max_cell.x, cell.x)
 			max_cell.y = maxi(max_cell.y, cell.y)
-		var preview_tile_size := 14.0
+		var preview_tile_size := 11.0
 		var piece_size := Vector2(max_cell - min_cell + Vector2i.ONE) * preview_tile_size
 		var preview_center := Vector2(next_rect.position.x + next_rect.size.x * 0.5, next_rect.position.y + 65.0)
 		var preview_origin := preview_center - piece_size * 0.5 - Vector2(min_cell) * preview_tile_size
@@ -1394,7 +1394,7 @@ func draw_cat_crowd() -> void:
 		draw_texture_rect(cat_texture, Rect2(position, CAT_CROWD_SIZE), false)
 	if not golden_cat_texture:
 		return
-	# Golden Tetris cats render last so their reward glow is never buried by the
+	# Golden six-line cats render last so their reward glow is never buried by the
 	# ordinary crowd. The aura stays outside the playfield boundary.
 	for cat_index in range(cat_crowd_count() - 1, -1, -1):
 		if not cat_crowd_golden[cat_index]:

@@ -3,6 +3,7 @@
 .tmp/
 export/
 web/
+web-six/
 .vercel/
 tests/output/
 *.keystore

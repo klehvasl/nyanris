@@ -1,8 +1,8 @@
-# Nyanris
+# Nyanris Six
 
-A portrait, mobile-first falling-block puzzle game for Godot 4.7. It combines classic line-clearing rules with a growing crowd of cats, wooden pixel-art presentation, local high scores, and score-based Stargazer and Lantern endings.
+An experimental branch of Nyanris built around twelve six-cell hexominoes on a 14×24 board. The released four-block game remains preserved on `master`; this branch has a separate app name, package ID, and local save directory.
 
-Play the installable Web version at [nyanris.vercel.app](https://nyanris.vercel.app).
+The published Web version remains the original game until this branch is ready for separate deployment.
 
 ## Run
 
