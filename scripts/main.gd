@@ -1263,6 +1263,15 @@ func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
 	flow_cascade_depth = 0
 	flow_falling_cells = active.cells().filter(func(cell: Vector2i) -> bool: return cell.y >= 0)
 	flow_falling_kind = active.kind
+	if game_mode == GameMode.FLOWING:
+		# A Flowing piece stops as a rigid shape, then its individual cells pour
+		# through every unsupported opening. This happens on every placement; a
+		# line clear is an outcome of settling, not a prerequisite for gravity.
+		flow_falling_cells = board.settle_tracked_cells(flow_falling_cells, flow_falling_kind)
+		lock_flash_cells = flow_falling_cells.duplicate()
+		if is_hard_drop:
+			hard_drop_landed_cells = flow_falling_cells.duplicate()
+			build_hard_drop_shock()
 	# Every complete row resolves as soon as a piece locks. The next
 	# piece is not spawned until the clear animation and removal finish.
 	clearing_rows = board.full_rows()

@@ -11,6 +11,7 @@ func _initialize() -> void:
 	test_incomplete_rows_never_clear()
 	test_all_complete_rows_resolve_together()
 	test_flow_floor_push()
+	test_flow_cells_settle_on_every_lock()
 	test_flow_piece_residue_cascade()
 	test_gravity_and_scoring()
 	test_mixed_bag()
@@ -147,6 +148,20 @@ func test_flow_piece_residue_cascade() -> void:
 	tracked = board.settle_tracked_cells(tracked, "I3")
 	check(tracked == [Vector2i(5, bottom)], "The surviving cell of a cleared piece must fall into the lowest opening")
 	check(board.full_rows() == [bottom], "A falling piece remnant must be able to complete a cascade line")
+
+func test_flow_cells_settle_on_every_lock() -> void:
+	var board := GameBoard.new()
+	var bottom := GameConfig.BOARD_SIZE.y - 1
+	for x in GameConfig.BOARD_SIZE.x:
+		if x not in [3, 4]:
+			board.cells[bottom][x] = "O4"
+	var tracked: Array = [Vector2i(3, bottom - 3), Vector2i(3, bottom - 2), Vector2i(4, bottom - 2)]
+	for cell: Vector2i in tracked:
+		board.cells[cell.y][cell.x] = "L3"
+	var settled := board.settle_tracked_cells(tracked, "L3")
+	check(settled.has(Vector2i(3, bottom)), "A placed cell must fall into an unsupported target before any clear")
+	check(settled.has(Vector2i(4, bottom)), "Each column of a placed piece must settle independently")
+	check(board.full_rows() == [bottom], "Placement gravity must be able to create the first clear")
 
 func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.gravity_seconds(0), 53.0 / 60.0), "Level 0 gravity should match Game Boy's 53 frames")
