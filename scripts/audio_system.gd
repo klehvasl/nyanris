@@ -54,7 +54,7 @@ func play_title_music() -> void:
 	play_music("res://assets/source/title song.mp3", "title")
 
 func play_game_music() -> void:
-	play_music("res://assets/audio/korobeiniki_strings.mp3", "gameplay")
+	play_music("res://assets/audio/kantele_grid.mp3", "gameplay")
 
 func play_music(path: String, music_id: String) -> void:
 	if current_music == music_id and music_player.playing:
