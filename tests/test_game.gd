@@ -160,8 +160,9 @@ func test_gravity_and_scoring() -> void:
 	check(is_equal_approx(GameConfig.HARD_DROP_TRAIL_SECONDS, 0.20), "Hard-drop pixel trail should last 200 ms")
 	check(is_equal_approx(GameConfig.HARD_DROP_IMPACT_SECONDS, 0.28), "Hard-drop impact should remain visible for 280 ms")
 	check(GameConfig.LINE_POINTS[5] == 2000, "Five-line base score should be 2000")
-	check(is_equal_approx(GameConfig.flow_rise_seconds(0), 12.0), "Flowing level 0 should rise every twelve seconds")
-	check(is_equal_approx(GameConfig.flow_rise_seconds(9), 7.05), "Flowing rise pressure should scale with starting level")
+	check(is_equal_approx(GameConfig.flow_rise_seconds(0), 5.0), "Flowing level 0 should travel one row every five seconds")
+	check(is_equal_approx(GameConfig.flow_rise_seconds(9), 2.84), "Flowing rise pressure should scale with starting level")
+	check(GameConfig.FLOW_INITIAL_MASKS[0] == "XXXXX..XXXXX", "Flowing must open with one centered domino-sized clearing target")
 	for mask: String in GameConfig.FLOW_INITIAL_MASKS + GameConfig.FLOW_RISING_MASKS:
 		check(mask.length() == GameConfig.BOARD_SIZE.x, "Every flow pattern must span the board width")
 		check(mask.contains("."), "Every flow row must retain at least one playable opening")
@@ -179,6 +180,12 @@ func test_mixed_bag() -> void:
 		check(occupied_cells == 61, "Bag %d must contain exactly 61 occupied cells" % bag_number)
 		for kind: String in GameConfig.PIECE_KINDS:
 			check(seen.has(kind), "Bag %d is missing %s" % [bag_number, kind])
+	var authored_randomizer := PieceRandomizer.new(12345)
+	check(authored_randomizer.take_piece("D2") == "D2", "Flowing must be able to author a domino opener")
+	var authored_seen := {"D2": true}
+	for draw in GameConfig.PIECE_KINDS.size() - 1:
+		authored_seen[authored_randomizer.next_piece()] = true
+	check(authored_seen.size() == GameConfig.PIECE_KINDS.size(), "An authored opener must still consume exactly one normal bag piece")
 
 func test_high_score_ranking() -> void:
 	var entries: Array[Dictionary] = []

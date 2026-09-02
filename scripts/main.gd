@@ -531,8 +531,9 @@ func _process(delta: float) -> void:
 	elif state == State.PLAYING:
 		if game_mode == GameMode.FLOWING:
 			flow_rise_accumulator += delta
-			if flow_rise_accumulator >= GameConfig.flow_rise_seconds(level):
-				flow_rise_accumulator = 0.0
+			var flow_interval := GameConfig.flow_rise_seconds(level)
+			while flow_rise_accumulator >= flow_interval:
+				flow_rise_accumulator -= flow_interval
 				if not advance_flow_floor():
 					finish_run()
 					return
@@ -1074,7 +1075,7 @@ func start_game() -> void:
 	piece_randomizer.reset()
 	if game_mode == GameMode.FLOWING:
 		populate_flow_floor()
-	next_kind = piece_randomizer.next_piece()
+	next_kind = piece_randomizer.take_piece("D2") if game_mode == GameMode.FLOWING else piece_randomizer.next_piece()
 	state = State.PLAYING
 	update_menu_controls()
 	audio.play_game_music()
@@ -1127,11 +1128,12 @@ func advance_flow_floor() -> bool:
 	flow_pattern_index += 1
 	if not board.push_up(row):
 		return false
-	# The falling piece remains in world space while the floor rises. Contact with
-	# it means the flow caught the player, rather than silently moving the piece.
+	# Shift the active piece with the scrolling coordinate field. Combined with
+	# the fractional draw offset, this makes the row boundary visually seamless.
+	if active:
+		active.position += Vector2i.UP
 	if active and not board.fits(active, active.position, active.rotation):
 		return false
-	audio.play_lock()
 	return true
 
 func finish_run() -> void:
@@ -1235,6 +1237,8 @@ func build_hard_drop_shock() -> void:
 	var left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE)
 	var width := float((max_x - min_x + 1) * GameConfig.CELL_SIZE)
 	var floor_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE)
+	if game_mode == GameMode.FLOWING:
+		floor_y += flow_board_offset_y()
 	for i in 24:
 		var side := -1.0 if i < 12 else 1.0
 		var rank := i % 12
@@ -1331,6 +1335,39 @@ func draw_tile(cell: Vector2i, kind: String, alpha := 1.0, use_ghost := false) -
 	var pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
 	draw_tile_at(pos, kind, alpha, use_ghost)
 
+func flow_board_offset_y() -> float:
+	if game_mode != GameMode.FLOWING:
+		return 0.0
+	var interval := GameConfig.flow_rise_seconds(level)
+	return -float(GameConfig.CELL_SIZE) * clampf(flow_rise_accumulator / interval, 0.0, 1.0)
+
+func draw_flow_board_tile(cell: Vector2i, kind: String, alpha := 1.0, use_ghost := false) -> void:
+	# Crop at the playfield edges so the logical one-row shift can happen exactly
+	# when the continuously moving row becomes fully visible.
+	var cell_size := float(GameConfig.CELL_SIZE)
+	var pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
+	pos.y += flow_board_offset_y()
+	var board_top := float(GameConfig.BOARD_ORIGIN.y)
+	var board_bottom := board_top + GameConfig.BOARD_SIZE.y * cell_size
+	var visible_top := maxf(pos.y, board_top)
+	var visible_bottom := minf(pos.y + cell_size, board_bottom)
+	var visible_height := visible_bottom - visible_top
+	if visible_height <= 0.0:
+		return
+	var crop_ratio := visible_height / cell_size
+	var top_ratio := (visible_top - pos.y) / cell_size
+	var texture: Texture2D = ghost_texture if use_ghost else tile_textures.get(kind)
+	if texture:
+		var texture_size := texture.get_size()
+		var source := Rect2(0.0, texture_size.y * top_ratio, texture_size.x, texture_size.y * crop_ratio)
+		draw_texture_rect_region(texture, Rect2(Vector2(pos.x, visible_top), Vector2(cell_size, visible_height)), source, Color(1, 1, 1, alpha))
+		if not use_ghost and is_equal_approx(visible_height, cell_size):
+			draw_wood_grain(pos, cell_size, kind, alpha)
+		return
+	var color: Color = GameConfig.COLORS[kind]
+	color.a = alpha
+	draw_rect(Rect2(Vector2(pos.x, visible_top), Vector2(cell_size, visible_height)), color)
+
 func draw_tile_at(pos: Vector2, kind: String, alpha := 1.0, use_ghost := false, render_size := -1.0) -> void:
 	var tile_size := float(GameConfig.CELL_SIZE) if render_size <= 0.0 else render_size
 	var texture: Texture2D = ghost_texture if use_ghost else tile_textures.get(kind)
@@ -1405,7 +1442,15 @@ func _draw() -> void:
 	for y in GameConfig.BOARD_SIZE.y:
 		for x in GameConfig.BOARD_SIZE.x:
 			if board.cells[y][x] != "":
-				draw_tile(Vector2i(x,y), board.cells[y][x])
+				if game_mode == GameMode.FLOWING:
+					draw_flow_board_tile(Vector2i(x, y), board.cells[y][x])
+				else:
+					draw_tile(Vector2i(x,y), board.cells[y][x])
+	if game_mode == GameMode.FLOWING and state in [State.PLAYING, State.PAUSED, State.CLEARING]:
+		var incoming_row := build_flow_row(flow_pattern_index)
+		for x in GameConfig.BOARD_SIZE.x:
+			if incoming_row[x] != "":
+				draw_flow_board_tile(Vector2i(x, GameConfig.BOARD_SIZE.y), incoming_row[x])
 	if hard_drop_fx_timer > 0.0:
 		draw_hard_drop_fx()
 	if state == State.CLEARING:
@@ -1413,9 +1458,16 @@ func _draw() -> void:
 	if active and state in [State.PLAYING, State.PAUSED]:
 		if state == State.PLAYING:
 			for cell: Vector2i in active.cells(Vector2i(active.position.x, ghost_y()), active.rotation):
-				draw_tile(cell, active.kind, 0.72, true)
+				if game_mode == GameMode.FLOWING:
+					draw_flow_board_tile(cell, active.kind, 0.72, true)
+				else:
+					draw_tile(cell, active.kind, 0.72, true)
 		for cell: Vector2i in active.cells():
-			if cell.y >= 0: draw_tile(cell, active.kind)
+			if cell.y >= 0:
+				if game_mode == GameMode.FLOWING:
+					draw_flow_board_tile(cell, active.kind)
+				else:
+					draw_tile(cell, active.kind)
 	draw_cat_crowd()
 	# Compact top HUD keeps all gameplay data clear of the playfield.
 	draw_rect(Rect2(0, 0, 360, 108), Color(0.055, 0.045, 0.038, 0.90))
@@ -1658,15 +1710,12 @@ func draw_level_select_screen() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(50, 393), "CHOOSE MODE & PACE", HORIZONTAL_ALIGNMENT_CENTER, 260, 18, CREAM)
 
 func draw_flow_warning(board_rect: Rect2) -> void:
-	var interval := GameConfig.flow_rise_seconds(level)
-	var remaining := maxf(0.0, interval - flow_rise_accumulator)
-	var urgent := remaining <= 3.0
-	var pulse := 0.76 + sin(Time.get_ticks_msec() * 0.012) * 0.20 if urgent else 0.72
-	var warning_color := Color(1.0, 0.68, 0.24, pulse) if urgent else Color(0.84, 0.76, 0.58, pulse)
+	var pulse := 0.78 + sin(Time.get_ticks_msec() * 0.006) * 0.10
+	var warning_color := Color(0.95, 0.73, 0.34, pulse)
 	var warning_rect := Rect2(board_rect.end.x - 72, board_rect.position.y + 6, 66, 22)
 	draw_rect(warning_rect, Color(0.04, 0.035, 0.03, 0.78))
 	draw_rect(warning_rect, warning_color, false, 1.0)
-	draw_string(ThemeDB.fallback_font, warning_rect.position + Vector2(4, 15), "FLOW ↑ %02d" % ceili(remaining), HORIZONTAL_ALIGNMENT_CENTER, 58, 9, warning_color)
+	draw_string(ThemeDB.fallback_font, warning_rect.position + Vector2(4, 15), "FLOWING  ↑", HORIZONTAL_ALIGNMENT_CENTER, 58, 9, warning_color)
 
 func draw_high_scores_screen() -> void:
 	if level_select_background:
@@ -1725,6 +1774,8 @@ func draw_hard_drop_fx() -> void:
 		if cell.y < 0:
 			continue
 		var tile_pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
+		if game_mode == GameMode.FLOWING:
+			tile_pos.y += flow_board_offset_y()
 		draw_rect(Rect2(tile_pos, Vector2(cell_size, cell_size)), Color(0.08, 0.09, 0.10, 0.08))
 		var impact_rect := Rect2(tile_pos + Vector2((cell_size - tile_width) * 0.5, (cell_size - tile_height) * 0.5), Vector2(tile_width, tile_height))
 		if texture:
@@ -1750,6 +1801,8 @@ func draw_hard_drop_comet(alpha: float) -> void:
 	# still receives a bright beam instead of reducing the effect to a few motes.
 	var beam_top := float(GameConfig.BOARD_ORIGIN.y)
 	var beam_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.72)
+	if game_mode == GameMode.FLOWING:
+		beam_bottom += flow_board_offset_y()
 	var beam_height := maxf(float(GameConfig.CELL_SIZE), beam_bottom - beam_top)
 	var piece_color: Color = GameConfig.COLORS[hard_drop_kind]
 
@@ -1807,6 +1860,8 @@ func draw_hard_drop_comet(alpha: float) -> void:
 				var landed_cell := Vector2(hard_drop_landed_cells[cell_index])
 				var echo_cell := start_cell.lerp(landed_cell, travel)
 				var echo_pos := Vector2(GameConfig.BOARD_ORIGIN) + echo_cell * GameConfig.CELL_SIZE
+				if game_mode == GameMode.FLOWING:
+					echo_pos.y += flow_board_offset_y()
 				draw_tile_at(echo_pos, hard_drop_kind, echo_alpha)
 
 	# Sparse star motes sit outside the core and keep the effect handcrafted.
@@ -1839,6 +1894,8 @@ func draw_hard_drop_pixel_shock(age: float) -> void:
 	if age < 0.12:
 		var shock_alpha := 1.0 - age / 0.12
 		var line_y := float(GameConfig.BOARD_ORIGIN.y + bottom_y * GameConfig.CELL_SIZE - 1)
+		if game_mode == GameMode.FLOWING:
+			line_y += flow_board_offset_y()
 		var contact_expand := age / 0.12 * 10.0
 		var line_left := float(GameConfig.BOARD_ORIGIN.x + min_x * GameConfig.CELL_SIZE - 5) - contact_expand
 		var line_right := float(GameConfig.BOARD_ORIGIN.x + (max_x + 1) * GameConfig.CELL_SIZE + 5) + contact_expand
@@ -1864,6 +1921,8 @@ func draw_line_clear_fx() -> void:
 	var board_center := board_left + GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE * 0.5
 	for row in clearing_rows:
 		var row_y := float(GameConfig.BOARD_ORIGIN.y + row * GameConfig.CELL_SIZE)
+		if game_mode == GameMode.FLOWING:
+			row_y += flow_board_offset_y()
 		var wipe := smoothstep(0.0, 1.0, clampf((progress - 0.16) / 0.62, 0.0, 1.0))
 		var half_width := GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE * 0.5 * wipe
 		draw_rect(Rect2(board_center - half_width, row_y, half_width * 2.0, GameConfig.CELL_SIZE), Color("151719"))

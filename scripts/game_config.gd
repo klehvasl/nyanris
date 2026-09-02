@@ -14,21 +14,21 @@ const ARR_SECONDS := 0.055
 const SOFT_DROP_SECONDS := 0.075
 const HARD_DROP_TRAIL_SECONDS := 0.20
 const HARD_DROP_IMPACT_SECONDS := 0.28
-const FLOW_RISE_SECONDS := 12.0
-const FLOW_RISE_MIN_SECONDS := 6.0
+const FLOW_RISE_SECONDS := 5.0
+const FLOW_RISE_MIN_SECONDS := 2.8
 const FLOW_STARTING_ROWS := 7
 
 # Temporary Flowing-mode floor studies. Each string is read left-to-right and
 # bottom-to-top; dots are open cells. Keeping at least two openings in every
 # row guarantees the starting pattern never awards a free clear.
 const FLOW_INITIAL_MASKS := [
-	"XXXX..XXXX..",
-	"XXX..XXXXX..",
-	"XX..XXXX..XX",
-	"X..XXXX..XXX",
-	"..XXXX..XXXX",
-	".XXX...XXX..",
-	"XX...XX...XX",
+	"XXXXX..XXXXX",
+	"XXXX....XXXX",
+	"XXXX....XXXX",
+	"XXX......XXX",
+	"XXX......XXX",
+	"XX........XX",
+	"XX........XX",
 ]
 const FLOW_RISING_MASKS := [
 	"XXX.XXXX.XXX",
@@ -61,4 +61,4 @@ static func gravity_seconds(level: int) -> float:
 	return GRAVITY_FRAMES[clampi(level, 0, MAX_LEVEL)] / 60.0
 
 static func flow_rise_seconds(level: int) -> float:
-	return maxf(FLOW_RISE_MIN_SECONDS, FLOW_RISE_SECONDS - clampi(level, 0, MAX_LEVEL) * 0.55)
+	return maxf(FLOW_RISE_MIN_SECONDS, FLOW_RISE_SECONDS - clampi(level, 0, MAX_LEVEL) * 0.24)

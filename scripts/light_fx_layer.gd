@@ -34,6 +34,7 @@ func draw_lock_light() -> void:
 		if cell.y < 0:
 			continue
 		var pos := Vector2(GameConfig.BOARD_ORIGIN + cell * GameConfig.CELL_SIZE)
+		pos.y += game.flow_board_offset_y()
 		var center := pos + Vector2(GameConfig.CELL_SIZE, GameConfig.CELL_SIZE) * 0.5
 		# Concentric, low-alpha blooms approximate radial falloff under additive blend.
 		draw_circle(center, 18.0, Color(warm.r, warm.g, warm.b, intensity * 0.045))
@@ -58,6 +59,7 @@ func draw_drop_beam(alpha: float) -> void:
 	var center_x := footprint_left + footprint_width * 0.5
 	var beam_top := float(GameConfig.BOARD_ORIGIN.y)
 	var beam_bottom := float(GameConfig.BOARD_ORIGIN.y + landed_top_row * GameConfig.CELL_SIZE + GameConfig.CELL_SIZE * 0.72)
+	beam_bottom += game.flow_board_offset_y()
 	var beam_height := maxf(float(GameConfig.CELL_SIZE), beam_bottom - beam_top)
 	var light_alpha := pow(alpha, 0.68)
 	var stain: Color = GameConfig.COLORS[game.hard_drop_kind]
@@ -93,6 +95,7 @@ func draw_drop_beam(alpha: float) -> void:
 				var landed_cell := Vector2(game.hard_drop_landed_cells[cell_index])
 				var echo_cell := start_cell.lerp(landed_cell, travel)
 				var pos := Vector2(GameConfig.BOARD_ORIGIN) + echo_cell * GameConfig.CELL_SIZE
+				pos.y += game.flow_board_offset_y()
 				if texture:
 					draw_texture_rect(texture, Rect2(pos, Vector2(GameConfig.CELL_SIZE, GameConfig.CELL_SIZE)), false, Color(1.0, 0.88, 0.55, echo_alpha))
 

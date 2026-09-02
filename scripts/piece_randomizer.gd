@@ -18,6 +18,14 @@ func next_piece() -> String:
 		refill()
 	return bag.pop_back()
 
+func take_piece(piece_kind: String) -> String:
+	# Used by authored openings without breaking the fixed bag: remove the chosen
+	# piece from its normal shuffled position, then continue through the remainder.
+	if bag.is_empty():
+		refill()
+	var index := bag.find(piece_kind)
+	return bag.pop_at(index) if index >= 0 else next_piece()
+
 func refill() -> void:
 	bag.clear()
 	for kind: String in GameConfig.PIECE_KINDS:
