@@ -182,11 +182,16 @@ func test_gravity_and_scoring() -> void:
 	for mask: String in GameConfig.FLOW_INITIAL_MASKS + GameConfig.FLOW_RISING_MASKS:
 		check(mask.length() == GameConfig.BOARD_SIZE.x, "Every flow pattern must span the board width")
 		check(mask.contains("."), "Every flow row must retain at least one playable opening")
-	var expected_gap_starts := [3, 1, 3, 5, 7, 9, 7, 5]
+	var expected_gap_starts := [4, 3, 2, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7, 6, 5]
+	var previous_gap_start := GameConfig.FLOW_INITIAL_MASKS[0].find("..")
 	for pattern_index in GameConfig.FLOW_RISING_MASKS.size():
 		var mask: String = GameConfig.FLOW_RISING_MASKS[pattern_index]
-		check(mask.find("..") == expected_gap_starts[pattern_index], "Flow gaps must trace the authored left-to-right zigzag")
+		var gap_start := mask.find("..")
+		check(gap_start == expected_gap_starts[pattern_index], "Flow gaps must trace the authored left-to-right zigzag")
 		check(mask.count("X") == GameConfig.BOARD_SIZE.x - 2, "Every rising row should have one domino-sized target")
+		check(absi(gap_start - previous_gap_start) <= 1, "Adjacent flow rows must retain a full-cell connected cave")
+		previous_gap_start = gap_start
+	check(absi(previous_gap_start - expected_gap_starts[0]) <= 1, "The looping flow pattern must keep its cave connected")
 	check(GameConfig.LINE_SHARDS_PER_BLOCK == 8, "Each cleared block must break into eight visual shards")
 
 func test_mixed_bag() -> void:
