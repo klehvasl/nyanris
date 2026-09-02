@@ -162,10 +162,17 @@ func test_gravity_and_scoring() -> void:
 	check(GameConfig.LINE_POINTS[5] == 2000, "Five-line base score should be 2000")
 	check(is_equal_approx(GameConfig.flow_rise_seconds(0), 5.0), "Flowing level 0 should travel one row every five seconds")
 	check(is_equal_approx(GameConfig.flow_rise_seconds(9), 2.84), "Flowing rise pressure should scale with starting level")
+	check(GameConfig.FLOW_STARTING_ROWS == 1, "Flowing should begin with one easy target row")
 	check(GameConfig.FLOW_INITIAL_MASKS[0] == "XXXXX..XXXXX", "Flowing must open with one centered domino-sized clearing target")
 	for mask: String in GameConfig.FLOW_INITIAL_MASKS + GameConfig.FLOW_RISING_MASKS:
 		check(mask.length() == GameConfig.BOARD_SIZE.x, "Every flow pattern must span the board width")
 		check(mask.contains("."), "Every flow row must retain at least one playable opening")
+	var expected_gap_starts := [3, 1, 3, 5, 7, 9, 7, 5]
+	for pattern_index in GameConfig.FLOW_RISING_MASKS.size():
+		var mask: String = GameConfig.FLOW_RISING_MASKS[pattern_index]
+		check(mask.find("..") == expected_gap_starts[pattern_index], "Flow gaps must trace the authored left-to-right zigzag")
+		check(mask.count("X") == GameConfig.BOARD_SIZE.x - 2, "Every rising row should have one domino-sized target")
+	check(GameConfig.LINE_SHARDS_PER_BLOCK == 8, "Each cleared block must break into eight visual shards")
 
 func test_mixed_bag() -> void:
 	var randomizer := PieceRandomizer.new(12345)

@@ -16,25 +16,26 @@ const HARD_DROP_TRAIL_SECONDS := 0.20
 const HARD_DROP_IMPACT_SECONDS := 0.28
 const FLOW_RISE_SECONDS := 5.0
 const FLOW_RISE_MIN_SECONDS := 2.8
-const FLOW_STARTING_ROWS := 7
+const FLOW_STARTING_ROWS := 1
+const LINE_SHARDS_PER_BLOCK := 8
+const LINE_SHARD_LIFETIME_SECONDS := 0.82
+const LINE_SHARD_SWEEP_SECONDS := 0.22
 
 # Temporary Flowing-mode floor studies. Each string is read left-to-right and
 # bottom-to-top; dots are open cells. Keeping at least two openings in every
 # row guarantees the starting pattern never awards a free clear.
 const FLOW_INITIAL_MASKS := [
 	"XXXXX..XXXXX",
-	"XXXX....XXXX",
-	"XXXX....XXXX",
-	"XXX......XXX",
-	"XXX......XXX",
-	"XX........XX",
-	"XX........XX",
 ]
 const FLOW_RISING_MASKS := [
-	"XXX.XXXX.XXX",
-	"X.XXXX.XXXX.",
-	".XXXX.XXXX.X",
-	"XX.XXXX.XXX.",
+	"XXX..XXXXXXX",
+	"X..XXXXXXXXX",
+	"XXX..XXXXXXX",
+	"XXXXX..XXXXX",
+	"XXXXXXX..XXX",
+	"XXXXXXXXX..X",
+	"XXXXXXX..XXX",
+	"XXXXX..XXXXX",
 ]
 
 # Original Game Boy Tetris normal level 0-9 timings, expressed as frames per row.

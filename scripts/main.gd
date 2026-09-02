@@ -68,6 +68,8 @@ var soft_drop_accumulator := 0.0
 var lock_timer := 0.0
 var clear_timer := 0.0
 var clearing_rows: Array[int] = []
+var line_clear_shards: Array[Dictionary] = []
+var line_shard_rng := RandomNumberGenerator.new()
 var repeat_direction := 0
 var repeat_timer := 0.0
 var touch_start := Vector2.ZERO
@@ -156,6 +158,7 @@ func _ready() -> void:
 	add_child(audio)
 	high_scores = SaveSystem.load_high_scores()
 	cat_crowd_rng.randomize()
+	line_shard_rng.randomize()
 	high_score = int(high_scores[0].score) if not high_scores.is_empty() else 0
 	background = load("res://assets/backgrounds/cat_room.png")
 	title_background = load("res://assets/source/titlev2.png")
@@ -506,6 +509,7 @@ func bind_joy_button(action: StringName, button: int) -> void:
 
 func _process(delta: float) -> void:
 	update_menu_controls()
+	update_line_clear_shards(delta)
 	if hard_drop_fx_timer > 0.0:
 		hard_drop_fx_timer = maxf(0.0, hard_drop_fx_timer - delta)
 	if lock_flash_timer > 0.0:
@@ -1055,6 +1059,7 @@ func start_game() -> void:
 	lock_timer = 0.0
 	clear_timer = 0.0
 	clearing_rows.clear()
+	line_clear_shards.clear()
 	hard_drop_fx_timer = 0.0
 	lock_flash_timer = 0.0
 	lock_flash_cells.clear()
@@ -1264,8 +1269,7 @@ func lock_piece(play_lock_sound := true, is_hard_drop := false) -> void:
 	if clearing_rows.is_empty():
 		spawn_piece()
 	else:
-		state = State.CLEARING
-		clear_timer = line_clear_seconds
+		begin_line_clear(clearing_rows)
 
 func begin_lock_flash(is_hard_drop: bool) -> void:
 	lock_flash_cells = active.cells().duplicate()
@@ -1273,6 +1277,58 @@ func begin_lock_flash(is_hard_drop: bool) -> void:
 	lock_flash_is_hard = is_hard_drop
 	lock_flash_duration = HARD_LOCK_FLASH_SECONDS if is_hard_drop else NORMAL_LOCK_FLASH_SECONDS
 	lock_flash_timer = lock_flash_duration
+
+func begin_line_clear(rows: Array[int]) -> void:
+	state = State.CLEARING
+	clear_timer = line_clear_seconds
+	spawn_line_clear_shards(rows)
+
+func spawn_line_clear_shards(rows: Array[int]) -> void:
+	var cell_size := float(GameConfig.CELL_SIZE)
+	var flow_offset := flow_board_offset_y()
+	for row: int in rows:
+		for x in GameConfig.BOARD_SIZE.x:
+			var kind: String = board.cells[row][x]
+			if kind == "":
+				continue
+			var cell_origin := Vector2(GameConfig.BOARD_ORIGIN + Vector2i(x, row) * GameConfig.CELL_SIZE)
+			cell_origin.y += flow_offset
+			var delay := float(x) / float(GameConfig.BOARD_SIZE.x - 1) * GameConfig.LINE_SHARD_SWEEP_SECONDS
+			for shard_index in GameConfig.LINE_SHARDS_PER_BLOCK:
+				var shard_column := shard_index % 4
+				var shard_row := shard_index / 4
+				var shard_size := Vector2(cell_size * 0.21, cell_size * 0.39)
+				var local_center := Vector2(
+					(float(shard_column) + 0.5) * cell_size / 4.0,
+					(float(shard_row) + 0.5) * cell_size / 2.0
+				)
+				var color: Color = GameConfig.COLORS[kind].lightened(0.18 + float(shard_index % 3) * 0.08)
+				line_clear_shards.append({
+					"origin": cell_origin + local_center,
+					"velocity": Vector2(
+						line_shard_rng.randf_range(-42.0, 42.0) + float(x - 5) * 2.0,
+						line_shard_rng.randf_range(-72.0, -18.0)
+					),
+					"size": shard_size,
+					"angle": line_shard_rng.randf_range(-0.16, 0.16),
+					"spin": line_shard_rng.randf_range(-7.0, 7.0),
+					"age": -delay,
+					"color": color,
+				})
+
+func update_line_clear_shards(delta: float) -> void:
+	for shard_index in range(line_clear_shards.size() - 1, -1, -1):
+		var shard: Dictionary = line_clear_shards[shard_index]
+		shard.age = float(shard.age) + delta
+		if float(shard.age) > GameConfig.LINE_SHARD_LIFETIME_SECONDS:
+			line_clear_shards.remove_at(shard_index)
+
+func is_clear_cell_fragmented(cell: Vector2i) -> bool:
+	if state != State.CLEARING or not clearing_rows.has(cell.y):
+		return false
+	var elapsed := line_clear_seconds - clear_timer
+	var delay := float(cell.x) / float(GameConfig.BOARD_SIZE.x - 1) * GameConfig.LINE_SHARD_SWEEP_SECONDS
+	return elapsed >= delay
 
 func finish_line_clear() -> void:
 	# Revalidate after the visual pause so only genuinely complete rows can be removed.
@@ -1310,8 +1366,7 @@ func finish_line_clear() -> void:
 		if not cascade_rows.is_empty():
 			flow_cascade_depth += 1
 			clearing_rows = cascade_rows
-			state = State.CLEARING
-			clear_timer = line_clear_seconds
+			begin_line_clear(clearing_rows)
 			queue_redraw()
 			return
 	clearing_rows.clear()
@@ -1442,6 +1497,8 @@ func _draw() -> void:
 	for y in GameConfig.BOARD_SIZE.y:
 		for x in GameConfig.BOARD_SIZE.x:
 			if board.cells[y][x] != "":
+				if is_clear_cell_fragmented(Vector2i(x, y)):
+					continue
 				if game_mode == GameMode.FLOWING:
 					draw_flow_board_tile(Vector2i(x, y), board.cells[y][x])
 				else:
@@ -1468,6 +1525,8 @@ func _draw() -> void:
 					draw_flow_board_tile(cell, active.kind)
 				else:
 					draw_tile(cell, active.kind)
+	if not line_clear_shards.is_empty():
+		draw_line_clear_shards()
 	draw_cat_crowd()
 	# Compact top HUD keeps all gameplay data clear of the playfield.
 	draw_rect(Rect2(0, 0, 360, 108), Color(0.055, 0.045, 0.038, 0.90))
@@ -1916,22 +1975,50 @@ func draw_hard_drop_pixel_shock(age: float) -> void:
 		draw_rect(Rect2(Vector2(round(position.x), round(position.y)), Vector2(size, size)), color)
 
 func draw_line_clear_fx() -> void:
-	var progress := clampf(1.0 - clear_timer / line_clear_seconds, 0.0, 1.0)
-	var board_left := float(GameConfig.BOARD_ORIGIN.x)
-	var board_center := board_left + GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE * 0.5
+	var elapsed := line_clear_seconds - clear_timer
+	var flow_offset := flow_board_offset_y()
 	for row in clearing_rows:
-		var row_y := float(GameConfig.BOARD_ORIGIN.y + row * GameConfig.CELL_SIZE)
-		if game_mode == GameMode.FLOWING:
-			row_y += flow_board_offset_y()
-		var wipe := smoothstep(0.0, 1.0, clampf((progress - 0.16) / 0.62, 0.0, 1.0))
-		var half_width := GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE * 0.5 * wipe
-		draw_rect(Rect2(board_center - half_width, row_y, half_width * 2.0, GameConfig.CELL_SIZE), Color("151719"))
-		if not line_clear_frames.is_empty():
-			var frame_index := mini(floori(progress * line_clear_frames.size()), line_clear_frames.size() - 1)
-			# Keep the glow focused around the cleared row instead of covering nearby play.
-			var effect_width := GameConfig.BOARD_SIZE.x * GameConfig.CELL_SIZE + 32.0
-			var effect_rect := Rect2(board_center - effect_width * 0.5, row_y - GameConfig.CELL_SIZE * 0.5, effect_width, GameConfig.CELL_SIZE * 2.0)
-			draw_texture_rect(line_clear_frames[frame_index], effect_rect, false, Color(1, 1, 1, 0.90))
+		for x in GameConfig.BOARD_SIZE.x:
+			var delay := float(x) / float(GameConfig.BOARD_SIZE.x - 1) * GameConfig.LINE_SHARD_SWEEP_SECONDS
+			var flash_age := elapsed - delay
+			if flash_age < 0.0 or flash_age > 0.11:
+				continue
+			var flash_alpha := 1.0 - flash_age / 0.11
+			var pos := Vector2(GameConfig.BOARD_ORIGIN + Vector2i(x, row) * GameConfig.CELL_SIZE)
+			pos.y += flow_offset
+			var center := pos + Vector2.ONE * GameConfig.CELL_SIZE * 0.5
+			draw_circle(center, GameConfig.CELL_SIZE * (0.72 + flash_age * 4.0), Color(1.0, 0.72, 0.25, 0.12 * flash_alpha))
+			draw_rect(Rect2(pos + Vector2(1, 1), Vector2.ONE * (GameConfig.CELL_SIZE - 2)), Color(1.0, 0.98, 0.78, 0.88 * flash_alpha), false, 2.0)
+			draw_line(center - Vector2(8, 0), center + Vector2(8, 0), Color(1.0, 0.90, 0.55, 0.72 * flash_alpha), 1.0)
+
+func draw_line_clear_shards() -> void:
+	const SHARD_GRAVITY := 360.0
+	for shard: Dictionary in line_clear_shards:
+		var age := float(shard.age)
+		if age < 0.0:
+			continue
+		var fade := 1.0 - smoothstep(0.48, GameConfig.LINE_SHARD_LIFETIME_SECONDS, age)
+		var velocity: Vector2 = shard.velocity
+		var position: Vector2 = shard.origin + velocity * age + Vector2(0, SHARD_GRAVITY * age * age * 0.5)
+		var angle := float(shard.angle) + float(shard.spin) * age
+		var half_size: Vector2 = Vector2(shard.size) * 0.5
+		var polygon := PackedVector2Array([
+			position + Vector2(-half_size.x, -half_size.y).rotated(angle),
+			position + Vector2(half_size.x, -half_size.y * 0.82).rotated(angle),
+			position + Vector2(half_size.x * 0.78, half_size.y).rotated(angle),
+			position + Vector2(-half_size.x, half_size.y * 0.72).rotated(angle),
+		])
+		var color: Color = shard.color
+		color.a = fade
+		if age < 0.12:
+			var burst := (1.0 - age / 0.12) * fade
+			draw_circle(position, maxf(half_size.x, half_size.y) * 1.8, Color(1.0, 0.72, 0.24, 0.10 * burst))
+			draw_line(position, position - velocity.normalized() * 7.0, Color(1.0, 0.93, 0.66, 0.36 * burst), 1.0)
+		draw_colored_polygon(polygon, Color(0.16, 0.09, 0.04, fade * 0.70))
+		var inner := PackedVector2Array()
+		for point: Vector2 in polygon:
+			inner.append(position + (point - position) * 0.78)
+		draw_colored_polygon(inner, color)
 
 func draw_overlay(title: String, subtitle: String) -> void:
 	var rect := Rect2(38, 190, 284, 294) if subtitle == "" else Rect2(38, 250, 284, 112)
